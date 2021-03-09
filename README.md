@@ -1,1 +1,1 @@
-# CheXpert_fewshot_learning
+# Comparative study of few-shot learning methods on CheXpert 
