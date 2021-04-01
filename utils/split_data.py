@@ -13,8 +13,10 @@ train_csv_path = args.path / "train_full.csv"
 # old_csv_path.replace(train_csv_path)
 
 train_csv = pd.read_csv(train_csv_path)
-train_csv["Patient"] = train_csv["Path"].apply(lambda x: x.split("/")[-3])
-patients = np.unique(train_csv["Patient"])
+train_csv["Patient"] = train_csv["Path"].apply(int(lambda x: x.split("/")[-3].split("patient")[-1]))
+train_csv["Patient"] -= train_csv["Patient"].iloc[0]
+patients = np.bincount(train_csv["Patient"])
+print(patients)
 target_val_amount = int(train_csv.shape[0] * args.val_ratio)
 print("Looking for approximately", target_val_amount, "images.")
 while True:
