@@ -35,11 +35,12 @@ flags.DEFINE_string('model_path', '0', 'path from which to load model')
 flags.DEFINE_integer('iteration_start', 0, 'number of iterations to start at if loading model')
 flags.DEFINE_boolean('use_mixup', False, 'whether to use mixup training or not')
 flags.DEFINE_integer('print_every', 25, 'number of iterations to do val for')
+flags.DEFINE_float('alpha', 0.4, 'alpha parameter for mixup')
 
 '''
 TODO
-- finish mixup
-- val: add mixup, clean up
+- test mixup
+- add mixup stats to writer
 - implement AUC and PRC
 '''
     
@@ -106,18 +107,18 @@ def train(model, optimizer, epoch, device, train_loader, val_loader,
             # y_bar equation in paper is not used?
 
             # generate mixup parameter
-            lambda_ =
+            lambda_ = numpy.random.beta(FLAGS.alpha, FLAGS.alpha)
 
             inds1 = torch.arange(FLAGS.batch_size)
             inds2 = torch.randperm(FLAGS.batch_size)
 
-            x_bar = lambda_ * imgs[inds1] + (1 - lambda_) * imgs[inds2]
+            x_bar = lambda_ * imgs[inds1] + (1. - lambda_) * imgs[inds2]
 
             # forward pass
             y_bar = model(x_bar)
             
             bce_loss = nn.BCELoss()
-            loss_mixup = lambda_ * bce_loss(y_bar, labels[inds1]) + (1 - lambda_) * bce_loss(y_bar, labels[inds2])
+            loss_mixup = lambda_ * bce_loss(y_bar, labels[inds1]) + (1. - lambda_) * bce_loss(y_bar, labels[inds2])
             loss_mixup = loss_mixup.sum()
 
             loss += loss_mixup
@@ -143,12 +144,16 @@ def train(model, optimizer, epoch, device, train_loader, val_loader,
                 ys_mixup = []
         
     # validation
-    val_act_loss, val_act_acc, val_acts, val_ys = validate(model, device, val_loader, FLAGS.print_every)
+    if FLAGS.use_mixup: 
+        val_act_loss, val_act_acc, val_labels, val_ys, \
+                val_loss_mixup, val_acc_mixup, ys_mixup = validate(model, device, val_loader, FLAGS.print_every)
+    else:
+        val_act_loss, val_act_acc, val_labels, val_ys = validate(model, device, val_loader, FLAGS.print_every)
 
     model.train()
 
-    log(val_writer, optimizer, iteration, val_act_loss, val_act_acc)
-    log_aps(val_writer, iteration, val_acts, val_ys)
+    log(val_writer, optimizer, iteration, val_loss, val_act_acc)
+    log_aps(val_writer, iteration, val_labels, val_ys)
             
     # save model
     file_name = os.path.join(FLAGS.logdir_prefix, FLAGS.logdir, 'model-{:d}.pth'.format(iteration))
@@ -165,32 +170,64 @@ def validate(model, device, val_loader, print_every):
     val_loss, val_acc, j = 0, 0, 0
     cross_entropy_loss = nn.CrossEntropyLoss()
     
-    acts, ys, val_act_loss, val_acc = [], [], [], []
+    labels_, ys, val_loss, val_acc = [], [], [], []
+    if FLAGS.use_mixup:
+        ys_mixup, val_loss, mixup = [], [], []
     
     with torch.no_grad():
-        for batch_idx, (o_tm1, a_tm1, o_t) in enumerate(val_loader):
+        for batch_idx, (imgs, labels) in enumerate(val_loader):
 
-            o_tm1, a_tm1, o_t = o_tm1.to(device), a_tm1.to(device), o_t.to(device)
+            imgs, labels = imgs.to(device), labels.to(device) 
 
             # forward pass
-            y = model(o_tm1, o_t)
+            y = model(imgs)
 
             # losses
-            loss = cross_entropy_loss(y, a_tm1)
+            loss = cross_entropy_loss(y, labels)
             
             # accuracy
             pred = y.argmax(dim=1, keepdim=True)        # get the index of the max log-probability
 
-            acts.append(a_tm1.detach().cpu().numpy())
+            labels_.append(labels.detach().cpu().numpy())
             ys.append((F.softmax(y, dim=1)).detach().cpu().numpy())
-            val_act_loss += [loss.item()]
+            val_loss += [loss.item()]
             val_acc += [pred.eq(a_tm1.view_as(pred)).float().mean().item()]
+
+            if FLAGS.use_mixup:
+                # what is alpha --> see mixup reference
+                # "additional samples" --> is there a regular non-mixup loss?
+                # y_bar equation in paper is not used?
+
+                # generate mixup parameter
+                lambda_ = numpy.random.beta(FLAGS.alpha, FLAGS.alpha)
+
+                inds1 = torch.arange(FLAGS.batch_size)
+                inds2 = torch.randperm(FLAGS.batch_size)
+
+                x_bar = lambda_ * imgs[inds1] + (1. - lambda_) * imgs[inds2]
+
+                # forward pass
+                y_bar = model(x_bar)
+                
+                bce_loss = nn.BCELoss()
+                loss_mixup = lambda_ * bce_loss(y_bar, labels[inds1]) + (1. - lambda_) * bce_loss(y_bar, labels[inds2])
+                loss_mixup = loss_mixup.sum()
+
+                loss += loss_mixup
+
+                val_loss_mixup += [loss_mixup.item()]
+                pred_mixup = y_bar.argmax(dim=1, keepdim=True)
+                ys_mixup.append((F.softmax(y_bar, dim=1)).detach().cpu().numpy())
+                val_acc_mixup += [pred_mixup.eq(labels.view_as(pred_mixup)).float().mean().item()]
 
             j += 1
             if j == print_every:
                 break
-
-    return val_act_loss, val_acc, acts, ys
+            
+    if FLAGS.use_mixup:
+        return val_loss, val_acc, labels_, ys, val_loss_mixup, val_acc_mixup, ys_mixup
+    else:
+        return val_loss, val_acc, labels_, ys 
 
 
 def main(argv):
