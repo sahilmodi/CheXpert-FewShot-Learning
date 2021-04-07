@@ -138,6 +138,7 @@ class Trainer():
                 loss += loss_mixup
 
             losses.append(loss.item())
+        
         self.writer.add_scalar("val/loss", np.mean(losses), self.iterations)
         self.writer.add_scalar("val/auc", np.mean(aucs), self.iterations)
         self.writer.add_scalar("val/prc", np.mean(prcs), self.iterations)
