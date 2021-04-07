@@ -29,6 +29,8 @@ class Trainer():
 
         self.writer = SummaryWriter(self.output_dir, flush_secs=60)
 
+        self.loss_fn = nn.BCEWithLogitsLoss()
+
     def train(self):
         t = tqdm(range(self.max_iters))
         t.update(self.iterations)
@@ -41,7 +43,6 @@ class Trainer():
         self.model.train()
 
         train_loss, train_acc = 0, 0
-        cross_entropy_loss = nn.CrossEntropyLoss()
 
         labels_, ys, train_loss, train_acc = [], [], [], []
         if self.mixup_alpha:
@@ -52,15 +53,15 @@ class Trainer():
             self.optimizer.zero_grad(set_to_none=True)
 
             y = self.model(imgs)
-            loss = cross_entropy_loss(y, labels)
+            loss = self.loss_fn(y, labels)
 
             # accuracy
-            pred = y.argmax(dim=1, keepdim=True) 
+            # pred = y.argmax(dim=1, keepdim=True) 
             
             labels_.append(labels.detach().cpu().numpy())
             ys.append((F.softmax(y, dim=1)).detach().cpu().numpy())
             train_loss += [loss.item()]
-            train_acc += [pred.eq(labels.view_as(pred)).float().mean().item()]
+            # train_acc += [pred.eq(labels.view_as(pred)).float().mean().item()]
 
             if self.mixup_alpha:
                 # what is alpha --> see mixup reference
@@ -99,12 +100,14 @@ class Trainer():
                 # log(train_writer, optimizer, iteration, train_loss, train_acc)
                 # log_aps(train_writer, iteration, acts, ys)
                             
-                train_loss, train_acc = [], []
-                labels_, ys = [], []           
-                if self.mixup_alpha:
-                    train_loss_mixup, train_acc_mixup = [], []
-                    ys_mixup = []
-
+                # train_loss, train_acc = [], []
+                # labels_, ys = [], []           
+                # if self.mixup_alpha:
+                #     train_loss_mixup, train_acc_mixup = [], []
+                #     ys_mixup = []
+            
+            postfix_map = {"loss": train_loss[-1]}
+            t.set_postfix(postfix_map, refresh=False)
             t.update()
             if self.iterations >= self.max_iters:
                 break
@@ -127,7 +130,6 @@ class Trainer():
         self.model.eval()
 
         val_loss, val_acc, j = 0, 0, 0
-        cross_entropy_loss = nn.CrossEntropyLoss()
         
         labels_, ys, val_loss, val_acc = [], [], [], []
         if self.mixup:
@@ -139,15 +141,15 @@ class Trainer():
             # forward pass
             with torch.no_grad():
                 y = self.model(imgs)
-                loss = cross_entropy_loss(y, labels)
+                loss = self.loss_fn(y, labels)
                 
             # accuracy
-            pred = y.argmax(dim=1, keepdim=True)        # get the index of the max log-probability
+            # pred = y.argmax(dim=1, keepdim=True)        # get the index of the max log-probability
 
             labels_.append(labels.detach().cpu().numpy())
             ys.append((F.softmax(y, dim=1)).detach().cpu().numpy())
             val_loss += [loss.item()]
-            val_acc += [pred.eq(labels.view_as(pred)).float().mean().item()]
+            # val_acc += [pred.eq(labels.view_as(pred)).float().mean().item()]
 
             if self.mixup_alpha:
                 # what is alpha --> see mixup reference

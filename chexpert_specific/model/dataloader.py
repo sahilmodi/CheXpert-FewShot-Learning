@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from pathlib import Path
 
@@ -36,7 +37,7 @@ class ChexpertDataset(Dataset):
     def __getitem__(self, index: int) -> None:
         annotation = self.annotations.iloc[index]
         image = Image.open(self.data_path.parent / annotation['Path'])
-        classes = annotation[['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']].values.astype("int64")
+        classes = annotation[['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']].values.astype("float32")
         data = self.transforms(image)
         return data.repeat(3, 1, 1), torch.from_numpy(classes)
 
@@ -47,7 +48,6 @@ def build_dataloader(split):
 
     ds_path = Path(cfg.DATA.PATH)
     bs = cfg.DATA.BATCH_SIZE
-    num_workers = cfg.DATA.NUM_WORKERS
 
     dataset = ChexpertDataset(ds_path / f"{split}.csv", data_augmentation=split=="train")
-    return DataLoader(dataset, batch_size=bs, num_workers=num_workers, shuffle=split == "train")
+    return DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 12), shuffle=split == "train")
