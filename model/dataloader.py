@@ -7,6 +7,8 @@ import PIL.Image as Image
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
 
+from utils.config import _C as cfg
+
 class ChexpertDataset(Dataset):
     def __init__(self, csv_path: Path, data_augmentation=False) -> None:
         super(ChexpertDataset, self).__init__()
@@ -40,13 +42,13 @@ class ChexpertDataset(Dataset):
         return data, torch.from_numpy(classes)
 
 
-def build_dataloader(cfg: CfgNode, split, data_augmentation=False):
+def build_dataloader(split):
     valid_splits = ["train", "valid", "test"]
     assert split in valid_splits, f"{split} should be one of {valid_splits}."
 
-    ds_path = Path(cfg.PATH)
-    bs = cfg.BATCH_SIZE
-    num_workers = cfg.NUM_WORKERS
+    ds_path = Path(cfg.DATA.PATH)
+    bs = cfg.DATA.BATCH_SIZE
+    num_workers = cfg.DATA.NUM_WORKERS
 
-    dataset = ChexpertDataset(ds_path / f"{split}.csv", data_augmentation)
+    dataset = ChexpertDataset(ds_path / f"{split}.csv", data_augmentation=split=="train")
     return DataLoader(dataset, batch_size=bs, num_workers=num_workers, shuffle=split == "train")
