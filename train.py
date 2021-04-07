@@ -19,7 +19,7 @@ def parse_args():
     parser.add_argument('--cfg', required=True, type=str, help='Path to config file')
     parser.add_argument('--gpu', type=int, required=True, help='GPU ID')
     parser.add_argument('--init', type=str, help='(optionally) path to pretrained model', default='')
-    parser.add_argument('--iteration_start', type=int, default=0 help='(optionally) iteration to resume training')
+    parser.add_argument('--iteration_start', type=int, default=0, help='(optionally) iteration to resume training')
     parser.add_argument('--seed', type=int, help='set random seed use this command', default=0)
     return parser.parse_args()
 
