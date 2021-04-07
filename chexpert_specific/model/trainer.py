@@ -12,12 +12,13 @@ from torch.utils.tensorboard import SummaryWriter
 from utils.config import _C as cfg
 
 class Trainer():
-    def __init__(self, model, optimizer, train_loader, val_loader, scheduler, output_dir, iterations) -> None:
+    def __init__(self, model, optimizer, train_loader, val_loader, test_loader, scheduler, output_dir, iterations) -> None:
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.train_loader = train_loader
         self.val_loader = val_loader
+        self.test_loader = test_loader
         self.mixup_alpha = cfg.SOLVER.MIXUP_ALPHA
 
         self.device = torch.device('cuda')
@@ -98,17 +99,19 @@ class Trainer():
                 break
         
         # validation
-        self.validate()
+        self.validate(split='val')
+        self.validate(split='test')
 
         # save model
         torch.save(self.model.state_dict(), self.output_dir / f'model-{self.iterations:05d}.pth')
-        
 
-    def validate(self):
+    def validate(self, split='val'):
+        assert split in ['val', 'test']
+
         self.model.eval()
         losses, aucs, prcs = [], [], []
 
-        for batch_idx, (imgs, labels) in enumerate(tqdm(self.val_loader, position=1, leave=False)):
+        for batch_idx, (imgs, labels) in enumerate(tqdm(eval(f'self.{split}_loader'), position=1, leave=False)):
             imgs, labels = imgs.to(self.device), labels.to(self.device) 
 
             # forward pass
@@ -142,9 +145,9 @@ class Trainer():
 
             losses.append(loss.item())
         
-        self.writer.add_scalar("val/loss", np.mean(losses), self.iterations)
-        self.writer.add_scalar("val/auc", np.nanmean(aucs), self.iterations)
-        self.writer.add_scalar("val/prc", np.mean(prcs), self.iterations)
+        self.writer.add_scalar(f"{split}/loss", np.mean(losses), self.iterations)
+        self.writer.add_scalar(f"{split}/auc", np.nanmean(aucs), self.iterations)
+        self.writer.add_scalar(f"{split}/prc", np.mean(prcs), self.iterations)
                 
     def get_auc(self, labels, y):
         try:
