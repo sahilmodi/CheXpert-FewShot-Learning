@@ -36,9 +36,9 @@ class ChexpertDataset(Dataset):
     def __getitem__(self, index: int) -> None:
         annotation = self.annotations.iloc[index]
         image = Image.open(self.data_path.parent / annotation['Path'])
-        classes = annotation[['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']].values.astype("uint8")
+        classes = annotation[['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']].values.astype("int64")
         data = self.transforms(image)
-        return data, torch.from_numpy(classes)
+        return data.repeat(3, 1, 1), torch.from_numpy(classes)
 
 
 def build_dataloader(split):
