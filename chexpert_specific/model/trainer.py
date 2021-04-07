@@ -98,7 +98,7 @@ class Trainer():
         self.validate()
 
         # save model
-        torch.save(self.model.state_dict(), self.output_dir / 'model-{:d}.pth'.format(self.iteration))
+        torch.save(self.model.state_dict(), self.output_dir / 'model-{:d}.pth'.format(self.iterations))
         
 
     def validate(self):
