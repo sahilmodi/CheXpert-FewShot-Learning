@@ -1,7 +1,7 @@
 OUTPUT_ROOT_DIR: './outputs'
 
 DATA:
-  PATH: '../CheXpert-v1.0-small/'
+  PATH: '/home/smodi9/CheXpert-v1.0-small/'
   BATCH_SIZE: 100
 
 SOLVER:
@@ -9,5 +9,5 @@ SOLVER:
   NUM_EPOCHS: 15
   SCHEDULER_STEP_SIZE: 5
   VAL_INTERVAL: 1
-  MIXUP_ALPHA: 0
+  MIXUP_ALPHA: 0.0
   WEIGHT_DECAY: 1.0e-4
