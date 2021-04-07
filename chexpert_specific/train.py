@@ -93,7 +93,7 @@ def main():
     try:
         trainer.train()
     except BaseException:
-        if len(glob(f"{output_dir}/*.tar")) < 1:
+        if len(glob(f"{output_dir}/*.pth")) < 1:
             shutil.rmtree(output_dir, ignore_errors=True)
         raise
 
