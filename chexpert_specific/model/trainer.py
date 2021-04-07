@@ -20,7 +20,7 @@ class Trainer():
         self.val_loader = val_loader
         self.mixup_alpha = cfg.SOLVER.MIXUP_ALPHA
 
-        self.device = torch.device(cfg.DATA.DEVICE)
+        self.device = torch.device('cuda')
         self.batch_size = cfg.DATA.BATCH_SIZE
         self.iterations = iterations
         self.max_iters = cfg.SOLVER.NUM_ITERS
@@ -44,7 +44,7 @@ class Trainer():
         cross_entropy_loss = nn.CrossEntropyLoss()
         
         labels_, ys, train_loss, train_acc = [], [], [], []
-        if self.mixup:
+        if self.mixup_alpha:
             ys_mixup, train_loss_mixup, train_acc_mixup = [], [], []
             
         for batch_idx, (imgs, labels) in enumerate(tqdm(self.train_loader, position=1, leave=False)):

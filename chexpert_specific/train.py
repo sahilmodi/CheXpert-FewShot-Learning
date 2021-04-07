@@ -1,9 +1,9 @@
 import os, sys
+import shutil
 import random
 import argparse
 import numpy as np
 from pathlib import Path
-from absl import app
 
 import torch
 import torchvision.models as models
@@ -16,8 +16,8 @@ from chexpert_specific.model.trainer import Trainer
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--output', required=True, type=str, default='sample', help='Name of output directory')
     parser.add_argument('--cfg', required=True, type=str, help='Path to config file')
+    parser.add_argument('--output', required=True, type=str, default='sample', help='Name of output directory')
     parser.add_argument('--gpu', type=int, required=True, help='GPU ID')
     parser.add_argument('--init', type=str, help='(optionally) path to pretrained model', default='')
     parser.add_argument('--iteration_start', type=int, default=0, help='(optionally) iteration to resume training')
@@ -68,7 +68,7 @@ def log(writer, optimizer, iteration, act_losses, train_accs):
     return   
 
 
-def main(argv):
+def main():
     args = parse_args()
     
     os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
@@ -82,10 +82,12 @@ def main(argv):
     cfg.merge_from_file(args.cfg)
     cfg.freeze()
 
-    output_dir = Path(cfg.OUTPUT_DIR) / args.output
+    output_dir = Path(cfg.OUTPUT_ROOT_DIR) / args.output
+    output_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(args.cfg, output_dir / 'config.yaml')
     
     train_loader = build_dataloader("train")
-    val_loader = build_dataloader("val")
+    val_loader = build_dataloader("valid")
     
     device = torch.device("cuda")
     model = models.resnet18(pretrained=False).to(device)
@@ -99,7 +101,6 @@ def main(argv):
     scheduler = StepLR(optimizer, step_size=cfg.SOLVER.SCHEDULER_STEP_SIZE, gamma=0.1)
 
     kwargs = {
-      'device': torch.device('cuda'),
       'model': model,
       'optimizer': optimizer,
       'scheduler': scheduler,
@@ -150,4 +151,4 @@ def voc_ap(rec, prec):
   return ap
 
 if __name__ == '__main__':
-    app.run(main)
+    main()
