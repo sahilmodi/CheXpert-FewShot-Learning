@@ -1,6 +1,5 @@
 import pandas as pd
 from pathlib import Path
-from yacs.config import CfgNode
 
 import torch
 import PIL.Image as Image

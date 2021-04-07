@@ -1,4 +1,4 @@
-import os
+import os, sys
 import random
 import argparse
 import numpy as np
@@ -9,9 +9,10 @@ import torch
 import torchvision.models as models
 from torch.optim.lr_scheduler import StepLR
 
+sys.path.append(str(Path(__file__).parent.parent))
 from utils.config import _C as cfg
-from model.dataloader import build_dataloader
-from model.trainer import Trainer
+from chexpert_specific.model.dataloader import build_dataloader
+from chexpert_specific.model.trainer import Trainer
 
 def parse_args():
     parser = argparse.ArgumentParser()
