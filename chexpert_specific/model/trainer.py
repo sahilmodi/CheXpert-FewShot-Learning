@@ -131,7 +131,7 @@ class Trainer():
         
         labels_, ys, val_loss, val_acc = [], [], [], []
         if self.mixup:
-            ys_mixup, val_loss, mixup = [], [], []
+            ys_mixup, val_loss_mixup, val_acc_mixup = [], [], []
         
         for batch_idx, (imgs, labels) in enumerate(tqdm(self.val_loader, position=1, leave=False)):
             imgs, labels = imgs.to(self.device), labels.to(self.device) 
@@ -147,7 +147,7 @@ class Trainer():
             labels_.append(labels.detach().cpu().numpy())
             ys.append((F.softmax(y, dim=1)).detach().cpu().numpy())
             val_loss += [loss.item()]
-            val_acc += [pred.eq(a_tm1.view_as(pred)).float().mean().item()]
+            val_acc += [pred.eq(labels.view_as(pred)).float().mean().item()]
 
             if self.mixup_alpha:
                 # what is alpha --> see mixup reference
