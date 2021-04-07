@@ -29,6 +29,7 @@ class Trainer():
         self.writer = SummaryWriter(self.output_dir, flush_secs=60)
 
         self.loss_fn = nn.BCEWithLogitsLoss()
+        self.bce_loss = nn.BCELoss()
 
     def train(self):
         t = tqdm(range(self.max_iters))
@@ -41,27 +42,18 @@ class Trainer():
     def train_epoch(self, t):
         self.model.train()
 
-        train_loss, train_auc = 0, 0
-
-        labels_, ys, train_loss, train_auc = [], [], [], []
-        if self.mixup_alpha:
-            ys_mixup, train_loss_mixup, train_auc_mixup = [], [], []
-            
         for batch_idx, (imgs, labels) in enumerate(self.train_loader):
-            imgs, labels_cuda = imgs.to(self.device), labels.to(self.device)
+            imgs, labels = imgs.to(self.device), labels.to(self.device)
             self.optimizer.zero_grad(set_to_none=True)
 
             y = self.model(imgs)
-            loss = self.loss_fn(y, labels_cuda)
+            loss = self.loss_fn(y, labels)
 
             # accuracy
             # pred = y.argmax(dim=1, keepdim=True) 
             
-            labels_.append(labels.detach().cpu().numpy())
-            train_loss += [loss.item()]
-
-            auc = metrics.roc_auc_score(labels.numpy(), y.detach().cpu().numpy(), average='weighted')
-            train_auc.append(auc)
+            auc = self.get_auc(labels, y)
+            prc = self.get_prc(labels, y)
 
             if self.mixup_alpha:
                 # what is alpha --> see mixup reference
@@ -79,16 +71,14 @@ class Trainer():
                 # forward pass
                 y_bar = self.model(x_bar)
                 
-                bce_loss = nn.BCELoss()
-                loss_mixup = lambda_ * bce_loss(y_bar, labels[inds1]) + (1. - lambda_) * bce_loss(y_bar, labels[inds2])
+                loss_mixup = lambda_ * self.bce_loss(y_bar, labels[inds1]) + (1. - lambda_) * self.bce_loss(y_bar, labels[inds2])
                 loss_mixup = loss_mixup.sum()
 
                 loss += loss_mixup
 
-                train_loss_mixup += [loss_mixup.item()]
-                pred_mixup = y_bar.argmax(dim=1, keepdim=True)
-                ys_mixup.append((F.softmax(y_bar, dim=1)).detach().cpu().numpy())
-                train_auc_mixup += [pred_mixup.eq(labels.view_as(pred_mixup)).float().mean().item()]
+                # pred_mixup = y_bar.argmax(dim=1, keepdim=True)
+                # ys_mixup.append((F.softmax(y_bar, dim=1)).detach().cpu().numpy())
+                # train_auc_mixup += [pred_mixup.eq(labels.view_as(pred_mixup)).float().mean().item()]
 
             # backprop
             loss.backward()
@@ -96,10 +86,15 @@ class Trainer():
             self.iterations += 1
                 
             if batch_idx % 10 == 0 and batch_idx != 0:
-                self.writer.add_scalar("train/loss", train_loss[-1], self.iterations)
-                self.writer.add_scalar("train/auc", train_auc[-1], self.iterations)
+                self.writer.add_scalar("train/loss", loss.item(), self.iterations)
+                self.writer.add_scalar("train/auc", auc, self.iterations)
+                self.writer.add_scalar("train/prc", prc, self.iterations)
             
-            postfix_map = {"loss": train_loss[-1], "W-AUC": train_auc[-1]}
+            postfix_map = {
+                "loss": loss.item(), 
+                "W-AUC": auc,
+                "W-PRC": prc
+            }
             t.set_postfix(postfix_map, refresh=False)
             t.update()
             if self.iterations >= self.max_iters:
@@ -112,22 +107,14 @@ class Trainer():
         else:
             val_act_loss, val_act_acc, val_labels, val_ys = self.validate()
 
-        # log(val_writer, optimizer, iteration, val_loss, val_act_acc)
-        # log_aps(val_writer, iteration, val_labels, val_ys)
-                
         # save model
         torch.save(self.model.state_dict(), self.output_dir / 'model-{:d}.pth'.format(self.iteration))
         
 
     def validate(self):
         self.model.eval()
+        losses, aucs, prcs = [], [], []
 
-        val_loss, val_acc, j = 0, 0, 0
-        
-        labels_, ys, val_loss, val_auc = [], [], [], []
-        if self.mixup:
-            ys_mixup, val_loss_mixup, val_auc_mixup = [], [], []
-        
         for batch_idx, (imgs, labels) in enumerate(tqdm(self.val_loader, position=1, leave=False)):
             imgs, labels = imgs.to(self.device), labels.to(self.device) 
 
@@ -136,12 +123,8 @@ class Trainer():
                 y = self.model(imgs)
                 loss = self.loss_fn(y, labels)
                 
-            labels_.append(labels.detach().cpu().numpy())
-            ys.append((F.softmax(y, dim=1)).detach().cpu().numpy())
-            val_loss += [loss.item()]
-
-            auc = metrics.roc_auc_score(labels.numpy(), y.detach().cpu().numpy(), average='weighted')
-            val_auc.append(auc)
+            aucs.append(self.get_auc(labels, y))
+            prcs.append(self.get_prc(labels, y))
 
             if self.mixup_alpha:
                 # what is alpha --> see mixup reference
@@ -159,20 +142,18 @@ class Trainer():
                 # forward pass
                 y_bar = self.model(x_bar)
                 
-                bce_loss = nn.BCELoss()
-                loss_mixup = lambda_ * bce_loss(y_bar, labels[inds1]) + (1. - lambda_) * bce_loss(y_bar, labels[inds2])
+                loss_mixup = lambda_ * self.bce_loss(y_bar, labels[inds1]) + (1. - lambda_) * self.bce_loss(y_bar, labels[inds2])
                 loss_mixup = loss_mixup.sum()
 
                 loss += loss_mixup
 
-                val_loss_mixup += [loss_mixup.item()]
-                pred_mixup = y_bar.argmax(dim=1, keepdim=True)
-                ys_mixup.append((F.softmax(y_bar, dim=1)).detach().cpu().numpy())
-                # val_acc_mixup += [pred_mixup.eq(labels.view_as(pred_mixup)).float().mean().item()]
-
-        self.writer.add_scalar("val/loss", np.mean(val_loss), self.iterations)
+            losses.append(loss.item())
+        self.writer.add_scalar("val/loss", np.mean(losses), self.iterations)
+        self.writer.add_scalar("val/auc", np.mean(aucs), self.iterations)
+        self.writer.add_scalar("val/prc", np.mean(prcs), self.iterations)
                 
-        if self.mixup_alpha:
-            return val_loss, val_acc, labels_, ys, val_loss_mixup, val_auc_mixup, ys_mixup
-        else:
-            return val_loss, val_acc, labels_, ys
+    def get_auc(self, labels, y):
+        return metrics.roc_auc_score(labels.cpu().numpy(), y.detach().cpu().numpy(), average='weighted')
+
+    def get_prc(self, labels, y):
+        return metrics.average_precision_score(labels.cpu().numpy(), y.detach().cpu().numpy(), average='weighted')

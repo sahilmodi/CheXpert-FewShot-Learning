@@ -67,6 +67,8 @@ def main():
     
     train_loader = build_dataloader("train")
     val_loader = build_dataloader("valid")
+
+    print("Train Batches:", len(train_loader), "|", "Val Batches:", len(val_loader))
     
     device = torch.device("cuda")
     model = Net().to(device)
