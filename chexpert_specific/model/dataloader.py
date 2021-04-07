@@ -6,7 +6,7 @@ import torch
 import PIL.Image as Image
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
-from torchvision.transforms.transforms import Normalize
+from torchvision.transforms.transforms import Normalize, ToPILImage
 
 from utils.config import _C as cfg
 
@@ -30,7 +30,10 @@ class ChexpertDataset(Dataset):
                 ),
                 transforms.Resize((self.height, self.width)),
                 transforms.ToTensor(),
-                transforms.Normalize(128, 64)
+                transforms.Normalize(128, 64),
+                transforms.ToPILImage(),
+                transforms.Lambda(lambda x: transforms.functional.equalize(x)),
+                transforms.ToTensor(),
             ])
 
     def __len__(self) -> int:
@@ -40,7 +43,7 @@ class ChexpertDataset(Dataset):
         annotation = self.annotations.iloc[index]
         image = Image.open(self.data_path.parent / annotation['Path'])
         classes = annotation[['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']].values.astype("float32")
-        data = self.transforms(transforms.functional.equalize(image))
+        data = self.transforms(image)
         return data.repeat(3, 1, 1), torch.from_numpy(classes)
 
 

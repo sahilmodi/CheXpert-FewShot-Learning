@@ -23,7 +23,7 @@ class Trainer():
         self.device = torch.device('cuda')
         self.batch_size = cfg.DATA.BATCH_SIZE
         self.iterations = iterations
-        self.max_iters = cfg.SOLVER.NUM_ITERS
+        self.max_iters = cfg.SOLVER.NUM_EPOCHS * len(self.train_loader)
         self.val_interval = cfg.SOLVER.VAL_INTERVAL
         self.output_dir = Path(output_dir)
 
