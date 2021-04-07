@@ -17,9 +17,9 @@ _C.DATA.BATCH_SIZE = 100
 # ---------------------------------------------------------------------------- #
 _C.SOLVER = CfgNode()
 
-_C.SOLVER.BASE_LR = 0.001
-_C.SOLVER.WEIGHT_DECAY =  0.0
+_C.SOLVER.BASE_LR = 1e-4
+_C.SOLVER.WEIGHT_DECAY =  1e-4
 _C.SOLVER.SCHEDULER_STEP_SIZE = 15
-_C.SOLVER.NUM_ITERS = 20
+_C.SOLVER.NUM_ITERS = 17640
 _C.SOLVER.VAL_INTERVAL = 5
 _C.SOLVER.MIXUP_ALPHA = 0

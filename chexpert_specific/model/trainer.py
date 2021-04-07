@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 from tqdm import tqdm
 from pathlib import Path
@@ -49,9 +50,6 @@ class Trainer():
             y = self.model(imgs)
             loss = self.loss_fn(y, labels)
 
-            # accuracy
-            # pred = y.argmax(dim=1, keepdim=True) 
-            
             auc = self.get_auc(labels, y)
             prc = self.get_prc(labels, y)
 
@@ -76,10 +74,6 @@ class Trainer():
 
                 loss += loss_mixup
 
-                # pred_mixup = y_bar.argmax(dim=1, keepdim=True)
-                # ys_mixup.append((F.softmax(y_bar, dim=1)).detach().cpu().numpy())
-                # train_auc_mixup += [pred_mixup.eq(labels.view_as(pred_mixup)).float().mean().item()]
-
             # backprop
             loss.backward()
             self.optimizer.step()
@@ -101,11 +95,7 @@ class Trainer():
                 break
         
         # validation
-        if self.mixup_alpha: 
-            val_act_loss, val_act_acc, val_labels, val_ys, \
-                    val_loss_mixup, val_acc_mixup, ys_mixup = self.validate()
-        else:
-            val_act_loss, val_act_acc, val_labels, val_ys = self.validate()
+        self.validate()
 
         # save model
         torch.save(self.model.state_dict(), self.output_dir / 'model-{:d}.pth'.format(self.iteration))
@@ -153,7 +143,12 @@ class Trainer():
         self.writer.add_scalar("val/prc", np.mean(prcs), self.iterations)
                 
     def get_auc(self, labels, y):
-        return metrics.roc_auc_score(labels.cpu().numpy(), y.detach().cpu().numpy(), average='weighted')
+        try:
+            return metrics.roc_auc_score(labels.cpu().numpy(), y.detach().cpu().numpy(), average='weighted')
+        except ValueError:
+            return np.nan
 
     def get_prc(self, labels, y):
-        return metrics.average_precision_score(labels.cpu().numpy(), y.detach().cpu().numpy(), average='weighted')
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            return metrics.average_precision_score(labels.cpu().numpy(), y.detach().cpu().numpy(), average='weighted')
