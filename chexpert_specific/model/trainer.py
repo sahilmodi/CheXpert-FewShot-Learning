@@ -33,7 +33,7 @@ class Trainer():
         self.bce_loss = nn.BCELoss()
 
     def train(self):
-        t = tqdm(range(self.max_iters))
+        t = tqdm(range(self.max_iters), dynamic_ncols=True)
         t.update(self.iterations)
         for epoch in t:
             self.train_epoch(t)
@@ -100,7 +100,7 @@ class Trainer():
         self.validate()
 
         # save model
-        torch.save(self.model.state_dict(), self.output_dir / 'model-{:d}.pth'.format(self.iterations))
+        torch.save(self.model.state_dict(), self.output_dir / f'model-{self.iterations:05d}.pth')
         
 
     def validate(self):
@@ -142,7 +142,7 @@ class Trainer():
             losses.append(loss.item())
         
         self.writer.add_scalar("val/loss", np.mean(losses), self.iterations)
-        self.writer.add_scalar("val/auc", np.mean(aucs), self.iterations)
+        self.writer.add_scalar("val/auc", np.nanmean(aucs), self.iterations)
         self.writer.add_scalar("val/prc", np.mean(prcs), self.iterations)
                 
     def get_auc(self, labels, y):
