@@ -87,10 +87,9 @@ class Trainer():
             loss.backward()
             self.optimizer.step()
             self.iterations += 1
-                
-            if batch_idx % self.train_recording_interval == 0 and batch_idx != 0:
-                global_step = batch_idx // self.train_recording_interval
-                global_step += self.iterations // self.iterations_per_epoch * self.train_recording_interval_per_epoch
+            
+            if batch_idx % self.train_recording_interval == 0:
+                global_step = int(self.iterations / self.iterations_per_epoch * self.train_recording_interval_per_epoch)
                 self.writer.add_scalar("train/loss", loss.item(), global_step)
                 self.writer.add_scalar("train/auc", auc, global_step)
                 self.writer.add_scalar("train/prc", prc, global_step)
