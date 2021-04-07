@@ -38,6 +38,8 @@ class Trainer():
         for epoch in t:
             self.train_epoch(t)
             self.scheduler.step()
+            if self.iterations >= self.max_iters:
+                break
         t.close()
     
     def train_epoch(self, t):
