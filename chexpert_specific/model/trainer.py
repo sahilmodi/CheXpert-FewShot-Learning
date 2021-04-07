@@ -34,7 +34,7 @@ class Trainer():
 
         # Logging
         self.train_recording_interval_per_epoch = 10
-        self.train_record_interval = self.iterations_per_epoch // self.train_recording_interval_per_epoch
+        self.train_recording_interval = self.iterations_per_epoch // self.train_recording_interval_per_epoch
         self.output_dir = Path(output_dir)
         self.writer = SummaryWriter(self.output_dir, flush_secs=60)
 
@@ -88,8 +88,8 @@ class Trainer():
             self.optimizer.step()
             self.iterations += 1
                 
-            if batch_idx % self.train_record_interval == 0 and batch_idx != 0:
-                global_step = batch_idx // self.train_interval
+            if batch_idx % self.train_recording_interval == 0 and batch_idx != 0:
+                global_step = batch_idx // self.train_recording_interval
                 global_step += self.iterations // self.iterations_per_epoch * self.train_recording_interval_per_epoch
                 self.writer.add_scalar("train/loss", loss.item(), global_step)
                 self.writer.add_scalar("train/auc", auc, global_step)
