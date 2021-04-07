@@ -1,6 +1,7 @@
 data_path=$1/CheXpert-v1.0-small
 zip_path=$data_path.zip
 [ ! -f $zip_path ] && curl http://download.cs.stanford.edu/deep/CheXpert-v1.0-small.zip --output $zip_path
+echo "Unzipping..."
 unzip -q $zip_path -d $1
 rm $zip_path
 echo Saved to $data_path

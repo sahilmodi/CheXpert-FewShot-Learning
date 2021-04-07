@@ -53,10 +53,9 @@ def main():
     os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
     if not torch.cuda.is_available():
         assert NotImplementedError
+    torch.cuda.set_device(args.gpu)
     print("Using", torch.cuda.get_device_name())
     set_seed(args.seed)
-        
-    torch.cuda.set_device(args.gpu)
 
     cfg.merge_from_file(args.cfg)
     cfg.freeze()
