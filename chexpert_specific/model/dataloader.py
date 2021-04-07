@@ -56,4 +56,4 @@ def build_dataloader(split):
     bs = cfg.DATA.BATCH_SIZE
 
     dataset = ChexpertDataset(ds_path / f"{split}.csv", split)
-    return DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 0), shuffle=split == "train")
+    return DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 12), shuffle=split == "train")
