@@ -23,7 +23,8 @@ class Trainer():
         self.device = torch.device('cuda')
         self.batch_size = cfg.DATA.BATCH_SIZE
         self.iterations = iterations
-        self.max_iters = cfg.SOLVER.NUM_EPOCHS * len(self.train_loader)
+        self.num_epochs = cfg.SOLVER.NUM_EPOCHS
+        self.max_iters = self.num_epochs * len(self.train_loader)
         self.val_interval = cfg.SOLVER.VAL_INTERVAL
         self.output_dir = Path(output_dir)
 
@@ -35,7 +36,7 @@ class Trainer():
     def train(self):
         t = tqdm(range(self.max_iters), dynamic_ncols=True)
         t.update(self.iterations)
-        for epoch in t:
+        for epoch in range(self.num_epochs):
             self.train_epoch(t)
             self.scheduler.step()
             if self.iterations >= self.max_iters:

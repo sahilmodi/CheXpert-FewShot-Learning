@@ -21,7 +21,6 @@ from chexpert_specific.model.net import Net
 TODO
 - test mixup
 - add mixup stats to writer
-- implement AUC and PRC
 '''
 
 def parse_args():
@@ -50,7 +49,7 @@ def set_seed(seed):
 def main():
     args = parse_args()
     
-    os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     if not torch.cuda.is_available():
         assert NotImplementedError
     torch.cuda.set_device(args.gpu)

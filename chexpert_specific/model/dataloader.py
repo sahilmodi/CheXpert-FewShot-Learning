@@ -6,7 +6,6 @@ import torch
 import PIL.Image as Image
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
-from torchvision.transforms.transforms import Normalize, ToPILImage
 
 from utils.config import _C as cfg
 
