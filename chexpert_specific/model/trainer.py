@@ -31,7 +31,7 @@ class Trainer():
         self.writer = SummaryWriter(self.output_dir, flush_secs=60)
 
         self.loss_fn = nn.BCEWithLogitsLoss()
-        self.bce_loss = nn.BCELoss()
+        self.bce_loss = nn.BCEWithLogitsLoss() # nn.BCELoss()
 
     def train(self):
         t = tqdm(range(self.max_iters), dynamic_ncols=True)
@@ -64,8 +64,8 @@ class Trainer():
                 # generate mixup parameter
                 lambda_ = np.random.beta(self.mixup_alpha, self.mixup_alpha)
 
-                inds1 = torch.arange(self.batch_size)
-                inds2 = torch.randperm(self.batch_size)
+                inds1 = torch.arange(imgs.shape[0])
+                inds2 = torch.randperm(imgs.shape[0])
 
                 x_bar = lambda_ * imgs[inds1] + (1. - lambda_) * imgs[inds2]
 
@@ -127,8 +127,8 @@ class Trainer():
                 # generate mixup parameter
                 lambda_ = np.random.beta(self.mixup_alpha, self.mixup_alpha)
 
-                inds1 = torch.arange(self.batch_size)
-                inds2 = torch.randperm(self.batch_size)
+                inds1 = torch.arange(imgs.shape[0])
+                inds2 = torch.randperm(imgs.shape[0])
 
                 x_bar = lambda_ * imgs[inds1] + (1. - lambda_) * imgs[inds2]
 
