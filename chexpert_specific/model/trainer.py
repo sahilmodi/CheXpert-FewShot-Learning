@@ -19,20 +19,25 @@ class Trainer():
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.test_loader = test_loader
+        self.device = torch.device('cuda')
+
+        # Training Parameters
+        self.iterations = iterations
+        self.batch_size = cfg.DATA.BATCH_SIZE
+        self.num_epochs = cfg.SOLVER.NUM_EPOCHS
+        self.iterations_per_epoch = len(self.train_loader)
+        self.max_iters = self.num_epochs * self.iterations_per_epoch
+
+        # Model Parameters
+        self.bce_loss = nn.BCEWithLogitsLoss() # nn.BCELoss()
         self.mixup_alpha = cfg.SOLVER.MIXUP_ALPHA
 
-        self.device = torch.device('cuda')
-        self.batch_size = cfg.DATA.BATCH_SIZE
-        self.iterations = iterations
-        self.num_epochs = cfg.SOLVER.NUM_EPOCHS
-        self.max_iters = self.num_epochs * len(self.train_loader)
-        self.val_interval = cfg.SOLVER.VAL_INTERVAL
+        # Logging
+        self.train_recording_interval_per_epoch = 10
+        self.train_record_interval = self.iterations_per_epoch // self.train_recording_interval_per_epoch
         self.output_dir = Path(output_dir)
-
         self.writer = SummaryWriter(self.output_dir, flush_secs=60)
 
-        self.loss_fn = nn.BCEWithLogitsLoss()
-        self.bce_loss = nn.BCEWithLogitsLoss() # nn.BCELoss()
 
     def train(self):
         t = tqdm(range(self.max_iters), dynamic_ncols=True)
@@ -52,7 +57,7 @@ class Trainer():
             self.optimizer.zero_grad(set_to_none=True)
 
             y = self.model(imgs)
-            loss = self.loss_fn(y, labels)
+            loss = self.bce_loss(y, labels)
 
             auc = self.get_auc(labels, y)
             prc = self.get_prc(labels, y)
@@ -83,11 +88,13 @@ class Trainer():
             self.optimizer.step()
             self.iterations += 1
                 
-            if batch_idx % 10 == 0 and batch_idx != 0:
-                self.writer.add_scalar("train/loss", loss.item(), self.iterations)
-                self.writer.add_scalar("train/auc", auc, self.iterations)
-                self.writer.add_scalar("train/prc", prc, self.iterations)
-            
+            if batch_idx % self.train_record_interval == 0 and batch_idx != 0:
+                global_step = batch_idx // self.train_interval
+                global_step += self.iterations // self.iterations_per_epoch * self.train_recording_interval_per_epoch
+                self.writer.add_scalar("train/loss", loss.item(), global_step)
+                self.writer.add_scalar("train/auc", auc, global_step)
+                self.writer.add_scalar("train/prc", prc, global_step)
+
             postfix_map = {
                 "loss": loss.item(), 
                 "W-AUC": auc,
@@ -117,7 +124,7 @@ class Trainer():
             # forward pass
             with torch.no_grad():
                 y = self.model(imgs)
-                loss = self.loss_fn(y, labels)
+                loss = self.bce_loss(y, labels)
                 
             aucs.append(self.get_auc(labels, y))
             prcs.append(self.get_prc(labels, y))
@@ -145,9 +152,9 @@ class Trainer():
 
             losses.append(loss.item())
         
-        self.writer.add_scalar(f"{split}/loss", np.mean(losses), self.iterations)
-        self.writer.add_scalar(f"{split}/auc", np.nanmean(aucs), self.iterations)
-        self.writer.add_scalar(f"{split}/prc", np.mean(prcs), self.iterations)
+        self.writer.add_scalar(f"{split}/loss", np.mean(losses), self.iterations // self.iterations_per_epoch)
+        self.writer.add_scalar(f"{split}/auc", np.nanmean(aucs), self.iterations // self.iterations_per_epoch)
+        self.writer.add_scalar(f"{split}/prc", np.mean(prcs), self.iterations // self.iterations_per_epoch)
                 
     def get_auc(self, labels, y):
         try:
