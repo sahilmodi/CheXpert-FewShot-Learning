@@ -1,0 +1,13 @@
+OUTPUT_ROOT_DIR: './outputs'
+
+DATA:
+  PATH: '/home/smodi9/CheXpert-v1.0-small/'
+  BATCH_SIZE: 100
+  TRAIN_SIZE: 1_000_000
+
+SOLVER:
+  BASE_LR: 1.0e-4
+  NUM_EPOCHS: 15
+  SCHEDULER_STEP_SIZE: 10
+  MIXUP_ALPHA: 0.0
+  WEIGHT_DECAY: 1.0e-4
