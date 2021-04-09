@@ -16,6 +16,7 @@ from models.util import create_model
 from dataset.mini_imagenet import ImageNet, MetaImageNet
 from dataset.tiered_imagenet import TieredImageNet, MetaTieredImageNet
 from dataset.cifar import CIFAR100, MetaCIFAR100
+from dataset.chexpert import Chexpert, MetaChexpert
 from dataset.transform_cfg import transforms_options, transforms_list
 
 from eval.meta_eval import meta_test
@@ -32,8 +33,8 @@ def parse_option():
     parser.add_argument('--model_path', type=str, default=None, help='absolute path to .pth model')
 
     # dataset
-    parser.add_argument('--dataset', type=str, default='CIFAR-FS', choices=['miniImageNet', 'tieredImageNet',
-                                                                                'CIFAR-FS', 'FC100'])
+    parser.add_argument('--dataset', type=str, default='CheXpert', choices=['miniImageNet', 'tieredImageNet',
+                                                                                'CIFAR-FS', 'FC100', 'CheXpert'])
     parser.add_argument('--transform', type=str, default='A', choices=transforms_list)
 
     # meta setting
@@ -121,29 +122,16 @@ def main():
             n_cls = 448
         else:
             n_cls = 351
-    elif opt.dataset == 'CIFAR-FS' or opt.dataset == 'FC100':
-        train_trans, test_trans = transforms_options['D']
-        meta_testloader = DataLoader(MetaCIFAR100(args=opt, partition='test',
-                                                  train_transform=train_trans,
-                                                  test_transform=test_trans,
+    elif opt.dataset =='CheXpert':
+        meta_testloader = DataLoader(MetaChexpert(args=opt, partition='test',
                                                   fix_seed=False),
                                      batch_size=opt.test_batch_size, shuffle=False, drop_last=False,
                                      num_workers=opt.num_workers)
-        meta_valloader = DataLoader(MetaCIFAR100(args=opt, partition='val',
-                                                 train_transform=train_trans,
-                                                 test_transform=test_trans,
+        meta_valloader = DataLoader(MetaChexpert(args=opt, partition='val',
                                                  fix_seed=False),
                                     batch_size=opt.test_batch_size, shuffle=False, drop_last=False,
                                     num_workers=opt.num_workers)
-        if opt.use_trainval:
-            n_cls = 80
-        else:
-            if opt.dataset == 'CIFAR-FS':
-                n_cls = 64
-            elif opt.dataset == 'FC100':
-                n_cls = 60
-            else:
-                raise NotImplementedError('dataset not supported: {}'.format(opt.dataset))
+        n_cls = 5
     else:
         raise NotImplementedError(opt.dataset)
 

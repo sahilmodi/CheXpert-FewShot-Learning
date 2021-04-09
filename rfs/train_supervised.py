@@ -19,6 +19,7 @@ from models.util import create_model
 from dataset.mini_imagenet import ImageNet, MetaImageNet
 from dataset.tiered_imagenet import TieredImageNet, MetaTieredImageNet
 from dataset.cifar import CIFAR100, MetaCIFAR100
+from dataset.chexpert import Chexpert, MetaChexpert
 from dataset.transform_cfg import transforms_options, transforms_list
 
 from util import adjust_learning_rate, accuracy, AverageMeter
@@ -37,7 +38,7 @@ def parse_option():
     parser.add_argument('--tb_freq', type=int, default=500, help='tb frequency')
     parser.add_argument('--save_freq', type=int, default=10, help='save frequency')
     parser.add_argument('--batch_size', type=int, default=64, help='batch_size')
-    parser.add_argument('--num_workers', type=int, default=8, help='num of workers to use')
+    parser.add_argument('--num_workers', type=int, default=6, help='num of workers to use')
     parser.add_argument('--epochs', type=int, default=100, help='number of training epochs')
 
     # optimization
@@ -50,8 +51,8 @@ def parse_option():
 
     # dataset
     parser.add_argument('--model', type=str, default='resnet12', choices=model_pool)
-    parser.add_argument('--dataset', type=str, default='CIFAR-FS', choices=['miniImageNet', 'tieredImageNet',
-                                                                                'CIFAR-FS', 'FC100'])
+    parser.add_argument('--dataset', type=str, default='CheXpert', choices=['miniImageNet', 'tieredImageNet',
+                                                                                'CIFAR-FS', 'FC100', 'CheXpert'])
     parser.add_argument('--transform', type=str, default='A', choices=transforms_list)
     parser.add_argument('--use_trainval', action='store_true', help='use trainval set')
 
@@ -70,7 +71,7 @@ def parse_option():
                         help='Number of classes for doing each classification run')
     parser.add_argument('--n_shots', type=int, default=1, metavar='N',
                         help='Number of shots in test')
-    parser.add_argument('--n_queries', type=int, default=15, metavar='N',
+    parser.add_argument('--n_queries', type=int, default=5, metavar='N',
                         help='Number of query in test')
     parser.add_argument('--n_aug_support_samples', default=5, type=int,
                         help='The number of augmented samples for each meta test sample')
@@ -95,7 +96,8 @@ def parse_option():
     if not opt.data_root:
         opt.data_root = './data/{}'.format(opt.dataset)
     else:
-        opt.data_root = '{}/{}'.format(opt.data_root, opt.dataset)
+        if opt.dataset != "CheXpert":
+            opt.data_root = '{}/{}'.format(opt.data_root, opt.dataset)
     opt.data_aug = True
 
     iterations = opt.lr_decay_epochs.split(',')
@@ -205,6 +207,20 @@ def main():
                 n_cls = 60
             else:
                 raise NotImplementedError('dataset not supported: {}'.format(opt.dataset))
+    elif opt.dataset == 'CheXpert':
+        train_loader = DataLoader(Chexpert(args=opt, partition=train_partition),
+                                  batch_size=opt.batch_size, shuffle=True, drop_last=True,
+                                  num_workers=opt.num_workers)
+        val_loader = DataLoader(Chexpert(args=opt, partition='train'),
+                                batch_size=opt.batch_size // 2, shuffle=False, drop_last=False,
+                                num_workers=opt.num_workers // 2)
+        meta_testloader = DataLoader(MetaChexpert(args=opt, partition='test'),
+                                     batch_size=opt.test_batch_size, shuffle=False, drop_last=False,
+                                     num_workers=opt.num_workers)
+        meta_valloader = DataLoader(MetaChexpert(args=opt, partition='val'),
+                                    batch_size=opt.test_batch_size, shuffle=False, drop_last=False,
+                                    num_workers=opt.num_workers)
+        n_cls = 5
     else:
         raise NotImplementedError(opt.dataset)
 
