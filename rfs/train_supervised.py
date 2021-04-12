@@ -40,6 +40,7 @@ def parse_option():
     parser.add_argument('--batch_size', type=int, default=64, help='batch_size')
     parser.add_argument('--num_workers', type=int, default=6, help='num of workers to use')
     parser.add_argument('--epochs', type=int, default=100, help='number of training epochs')
+    parser.add_argument('--gpus', type=str, default=0, help='Which gpu to use')
 
     # optimization
     parser.add_argument('--learning_rate', type=float, default=0.05, help='learning rate')
@@ -124,6 +125,8 @@ def parse_option():
     if not os.path.isdir(opt.save_folder):
         os.makedirs(opt.save_folder)
 
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpus
     opt.n_gpu = torch.cuda.device_count()
 
     return opt

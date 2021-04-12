@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 from utils.config import _C as cfg
 
 class Trainer():
-    def __init__(self, model, optimizer, train_loader, val_loader, test_loader, scheduler, output_dir, iterations) -> None:
+    def __init__(self, model, optimizer, train_loader, val_loader, test_loader, scheduler, output_dir, teacher) -> None:
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -21,15 +21,21 @@ class Trainer():
         self.test_loader = test_loader
         self.device = torch.device('cuda')
 
+        # Self Training:
+        self.teacher = teacher
+        cfg_trn_node = cfg.STUDENT if (cfg.SOLVER.SELF_TRAINING and not self.teacher) else cfg.TEACHER
+
         # Training Parameters
-        self.iterations = iterations
         self.batch_size = cfg.DATA.BATCH_SIZE
-        self.num_epochs = cfg.SOLVER.NUM_EPOCHS
+        self.num_epochs = cfg_trn_node.NUM_EPOCHS
         self.iterations_per_epoch = len(self.train_loader)
         self.max_iters = self.num_epochs * self.iterations_per_epoch
-
-        # Model Parameters
-        self.bce_loss = nn.BCEWithLogitsLoss() # nn.BCELoss()
+        self.bce_loss = nn.BCEWithLogitsLoss()
+        
+        # Training Hyperparameters
+        self.beta_u = cfg_trn_node.BETA_U
+        self.beta_l = cfg_trn_node.BETA_L
+        self.beta_c = cfg_trn_node.BETA_C
         self.mixup_alpha = cfg.SOLVER.MIXUP_ALPHA
 
         # Logging
@@ -41,7 +47,6 @@ class Trainer():
 
     def train(self):
         t = tqdm(range(self.max_iters), dynamic_ncols=True)
-        t.update(self.iterations)
         for epoch in range(self.num_epochs):
             self.train_epoch(t)
             self.scheduler.step()
