@@ -26,8 +26,8 @@ class ChexpertDataset(Dataset):
                 transforms.ToTensor(),
             ])
         if split == "train":
-            assert cfg.DATA.BATCH_SIZE <= cfg.DATA.TRAIN_SIZE, "Batch size must be smaller than train size."
-            self.annotations = self.annotations.sample(frac=1).reset_index(drop=True)[:cfg.DATA.TRAIN_SIZE]
+            assert cfg.DATA.BATCH_SIZE <= cfg.DATA.LABELED_SIZE, "Batch size must be smaller than train size."
+            self.annotations = self.annotations.sample(frac=1).reset_index(drop=True)[:cfg.DATA.LABELED_SIZE]
             self.transforms = transforms.Compose([
                 self.transforms,
                 transforms.RandomAffine(
