@@ -12,7 +12,8 @@ _C.OUTPUT_ROOT_DIR = ''
 _C.DATA = CfgNode()
 _C.DATA.PATH = './data/'
 _C.DATA.BATCH_SIZE = 100
-_C.DATA.TRAIN_SIZE = 1_000_000
+_C.DATA.LABELED_SIZE = 1_000_000
+_C.DATA.UNLABELED_SIZE = 15_000
 # ---------------------------------------------------------------------------- #
 # Solver
 # ---------------------------------------------------------------------------- #
