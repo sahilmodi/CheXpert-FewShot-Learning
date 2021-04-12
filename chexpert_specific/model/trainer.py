@@ -160,6 +160,12 @@ class Trainer():
 
                 loss += loss_mixup
 
+            if self.beta_c:
+                y_ = torch.sigmoid(y)
+                pcs = torch.mean(y_, axis=0)
+                rct = torch.log((0.35 / pcs) + (pcs / 0.75))
+                loss += self.beta_c * torch.sum(rct)
+
             losses.append(loss.item())
         
         self.writer.add_scalar(f"{split}/loss", np.mean(losses), self.iterations // self.iterations_per_epoch)
