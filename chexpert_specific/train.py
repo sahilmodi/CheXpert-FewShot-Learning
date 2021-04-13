@@ -28,8 +28,6 @@ def parse_args():
     parser.add_argument('--cfg', required=True, type=str, help='Path to config file')
     parser.add_argument('--output', required=True, type=str, default='sample', help='Name of output directory')
     parser.add_argument('--gpu', type=int, required=True, help='GPU ID')
-    parser.add_argument('--init', type=str, help='(optionally) path to pretrained model', default='')
-    parser.add_argument('--iteration_start', type=int, default=0, help='(optionally) iteration to resume training')
     parser.add_argument('--seed', type=int, help='set random seed use this command', default=0)
     return parser.parse_args()
 
@@ -70,36 +68,36 @@ def main():
     print("Train Batches:", len(train_loader), "| Val Batches:", len(val_loader), "| Test Batches:", len(test_loader))
     
     device = torch.device("cuda")
-    model = Net().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.SOLVER.BASE_LR, weight_decay=cfg.SOLVER.WEIGHT_DECAY)
- 
-    if args.init:
-        model.load_state_dict(torch.load(args.init, device))
-        print("Loaded model!")
+    
+    # first iteration is teacher training, second is student
+    teacher_model = None
+    for i in range(int(cfg.SOLVER.SELF_TRAINING) + 1):
+        model = Net().to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=cfg.SOLVER.BASE_LR, weight_decay=cfg.SOLVER.WEIGHT_DECAY)
+    
+        scheduler = StepLR(optimizer, step_size=cfg.SOLVER.SCHEDULER_STEP_SIZE, gamma=0.1)
 
-    scheduler = StepLR(optimizer, step_size=cfg.SOLVER.SCHEDULER_STEP_SIZE, gamma=0.1)
+        kwargs = {
+            'model': model,
+            'optimizer': optimizer,
+            'scheduler': scheduler,
+            'train_loader': train_loader,
+            'train_loader_unlabeled': train_loader_u,
+            'val_loader': val_loader,
+            'test_loader': test_loader,
+            'output_dir': output_dir,
+            'teacher_model': teacher_model
+        }
+        trainer = Trainer(**kwargs)
 
-    kwargs = {
-      'model': model,
-      'optimizer': optimizer,
-      'scheduler': scheduler,
-      'train_loader': train_loader,
-      'train_loader_unlabeled': train_loader_u,
-      'val_loader': val_loader,
-      'test_loader': test_loader,
-      'iterations': args.iteration_start,
-      'output_dir': output_dir,
-      'teacher': True
-    }
-    trainer = Trainer(**kwargs)
-
-    try:
-        trainer.train()
-    except BaseException:
-        if len(glob(f"{output_dir}/*.pth")) < 1:
-            shutil.rmtree(output_dir, ignore_errors=True)
-        raise
-
+        try:
+            trainer.train()
+            teacher_model = model
+        except BaseException:
+            if len(glob(f"{output_dir}/*.pth")) < 1:
+                shutil.rmtree(output_dir, ignore_errors=True)
+            raise
+        
 
 if __name__ == '__main__':
     main()

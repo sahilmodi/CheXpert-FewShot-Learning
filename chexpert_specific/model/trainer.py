@@ -13,7 +13,7 @@ from utils.config import _C as cfg
 
 class Trainer():
     def __init__(self, model, optimizer, train_loader, train_loader_unlabeled, val_loader, test_loader, 
-                 scheduler, iterations, output_dir, teacher) -> None:
+                 scheduler, output_dir, teacher_model=None) -> None:
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -24,10 +24,12 @@ class Trainer():
         self.device = torch.device('cuda')
 
         # Self Training:
-        self.teacher = teacher
+        self.teacher_model = teacher_model
         self.self_training = cfg.SOLVER.SELF_TRAINING
+        self.student = self.self_training and self.teacher_model is not None
+        self.teacher = not self.student
+        self.mode = 'teacher' if self.teacher else 'student'
         cfg_trn_node = cfg.STUDENT if (self.self_training and not self.teacher) else cfg.TEACHER
-        self.kldiv_loss = nn.KLDivLoss()
 
         # Training Parameters
         self.batch_size = cfg.DATA.BATCH_SIZE
@@ -35,7 +37,8 @@ class Trainer():
         self.iterations_per_epoch = len(self.train_loader)
         self.max_iters = self.num_epochs * self.iterations_per_epoch
         self.bce_loss = nn.BCEWithLogitsLoss()
-        self.iterations = iterations
+        self.kldiv_loss = nn.KLDivLoss()
+        self.iterations = 0
         
         # Training Hyperparameters
         self.beta_u = cfg_trn_node.BETA_U
@@ -47,12 +50,12 @@ class Trainer():
         self.train_recording_interval_per_epoch = 10
         self.train_recording_interval = self.iterations_per_epoch // self.train_recording_interval_per_epoch
         self.output_dir = Path(output_dir)
-        self.writer = SummaryWriter(self.output_dir, flush_secs=60)
+        self.writer = SummaryWriter(self.output_dir / self.mode, flush_secs=60)
 
 
     def train(self):
+        print(f"Training the {self.mode}...")
         t = tqdm(range(self.max_iters), dynamic_ncols=True)
-        t.update(self.iterations)
         for epoch in range(self.num_epochs):
             self.train_epoch(t)
             self.scheduler.step()
@@ -66,11 +69,12 @@ class Trainer():
         for batch_idx, (imgs, labels) in enumerate(self.train_loader):
             imgs, labels = imgs.to(self.device), labels.to(self.device)
             
-            try:
-                imgs_unlabeled = unlabeled_iterator.next().to(self.device)
-            except StopIteration:
-                unlabeled_iterator = iter(self.train_loader_u)
-                imgs_unlabeled = unlabeled_iterator.next().to(self.device)
+            if self.student:
+                try:
+                    imgs_unlabeled = unlabeled_iterator.next().to(self.device)
+                except StopIteration:
+                    unlabeled_iterator = iter(self.train_loader_u)
+                    imgs_unlabeled = unlabeled_iterator.next().to(self.device)
 
             self.optimizer.zero_grad(set_to_none=True)
             y = self.model(imgs)
@@ -109,7 +113,7 @@ class Trainer():
                     loss += loss_mixup
 
 
-            if self.self_training and not self.teacher:
+            if self.student:
                 pass
 
             if self.beta_c:
@@ -144,7 +148,7 @@ class Trainer():
         self.validate(split='test')
 
         # save model
-        torch.save(self.model.state_dict(), self.output_dir / f'model-{self.iterations:05d}.pth')
+        torch.save(self.model.state_dict(), self.output_dir / f'model-{self.iterations:05d}_{self.mode}.pth')
 
     def validate(self, split='val'):
         assert split in ['val', 'test']
