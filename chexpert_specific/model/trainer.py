@@ -12,25 +12,29 @@ from torch.utils.tensorboard import SummaryWriter
 from utils.config import _C as cfg
 
 class Trainer():
-    def __init__(self, model, optimizer, train_loader, val_loader, test_loader, scheduler, output_dir, teacher) -> None:
+    def __init__(self, model, optimizer, train_loader, train_loader_unlabeled, val_loader, test_loader, 
+                 scheduler, iterations, output_dir, teacher) -> None:
         self.model = model
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.train_loader = train_loader
+        self.train_loader_u = train_loader_unlabeled
         self.val_loader = val_loader
         self.test_loader = test_loader
         self.device = torch.device('cuda')
 
         # Self Training:
         self.teacher = teacher
-        cfg_trn_node = cfg.STUDENT if (cfg.SOLVER.SELF_TRAINING and not self.teacher) else cfg.TEACHER
+        self.self_training = cfg.SOLVER.SELF_TRAINING
+        cfg_trn_node = cfg.STUDENT if (self.self_training and not self.teacher) else cfg.TEACHER
 
         # Training Parameters
         self.batch_size = cfg.DATA.BATCH_SIZE
-        self.num_epochs = cfg_trn_node.NUM_EPOCHS
+        self.num_epochs = cfg_trn_node.EPOCHS
         self.iterations_per_epoch = len(self.train_loader)
         self.max_iters = self.num_epochs * self.iterations_per_epoch
         self.bce_loss = nn.BCEWithLogitsLoss()
+        self.iterations = iterations
         
         # Training Hyperparameters
         self.beta_u = cfg_trn_node.BETA_U
@@ -47,6 +51,7 @@ class Trainer():
 
     def train(self):
         t = tqdm(range(self.max_iters), dynamic_ncols=True)
+        t.update(self.iterations)
         for epoch in range(self.num_epochs):
             self.train_epoch(t)
             self.scheduler.step()
@@ -56,11 +61,17 @@ class Trainer():
     
     def train_epoch(self, t):
         self.model.train()
-
+        unlabeled_iterator = iter(self.train_loader_u)
         for batch_idx, (imgs, labels) in enumerate(self.train_loader):
             imgs, labels = imgs.to(self.device), labels.to(self.device)
-            self.optimizer.zero_grad(set_to_none=True)
+            
+            try:
+                imgs_unlabeled = unlabeled_iterator.next().to(self.device)
+            except StopIteration:
+                unlabeled_iterator = iter(self.train_loader_u)
+                imgs_unlabeled = unlabeled_iterator.next().to(self.device)
 
+            self.optimizer.zero_grad(set_to_none=True)
             y = self.model(imgs)
             loss = self.bce_loss(y, labels)
 
@@ -86,7 +97,14 @@ class Trainer():
                 loss_mixup = lambda_ * self.bce_loss(y_bar, labels[inds1]) + (1. - lambda_) * self.bce_loss(y_bar, labels[inds2])
                 loss_mixup = loss_mixup.sum()
 
-                loss += loss_mixup
+                if self.teacher and self.self_training:
+                    loss = loss_mixup
+                else:
+                    loss += loss_mixup
+
+
+            if self.self_training and not self.teacher:
+                pass
 
             if self.beta_c:
                 y_ = torch.sigmoid(y)

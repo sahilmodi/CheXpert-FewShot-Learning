@@ -12,8 +12,8 @@ _C.OUTPUT_ROOT_DIR = ''
 _C.DATA = CfgNode()
 _C.DATA.PATH = './data/'
 _C.DATA.BATCH_SIZE = 100
-_C.DATA.LABELED_SIZE = 1_000_000
-_C.DATA.UNLABELED_SIZE = 15_000
+_C.DATA.LABELED_SIZE = 120_000
+_C.DATA.UNLABELED_SIZE = 0
 # ---------------------------------------------------------------------------- #
 # Solver
 # ---------------------------------------------------------------------------- #
@@ -23,6 +23,7 @@ _C.SOLVER.BASE_LR = 1e-4
 _C.SOLVER.WEIGHT_DECAY =  1e-4
 _C.SOLVER.SCHEDULER_STEP_SIZE = 5
 _C.SOLVER.MIXUP_ALPHA = 0.0
+_C.SOLVER.SELF_TRAINING = False
 
 _C.TEACHER = CfgNode()
 _C.TEACHER.EPOCHS = 15

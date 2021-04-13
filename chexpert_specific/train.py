@@ -63,9 +63,9 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(args.cfg, output_dir / 'config.yaml')
     
-    train_loader = build_dataloader("train")
-    val_loader = build_dataloader("valid")
-    test_loader = build_dataloader("test")
+    train_loader, train_loader_u = build_dataloader("train")
+    val_loader, _ = build_dataloader("valid")
+    test_loader, _ = build_dataloader("test")
 
     print("Train Batches:", len(train_loader), "| Val Batches:", len(val_loader), "| Test Batches:", len(test_loader))
     
@@ -84,10 +84,12 @@ def main():
       'optimizer': optimizer,
       'scheduler': scheduler,
       'train_loader': train_loader,
+      'train_loader_unlabeled': train_loader_u,
       'val_loader': val_loader,
       'test_loader': test_loader,
       'iterations': args.iteration_start,
       'output_dir': output_dir,
+      'teacher': True
     }
     trainer = Trainer(**kwargs)
 
