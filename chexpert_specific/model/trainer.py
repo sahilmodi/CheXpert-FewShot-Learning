@@ -27,6 +27,7 @@ class Trainer():
         self.teacher = teacher
         self.self_training = cfg.SOLVER.SELF_TRAINING
         cfg_trn_node = cfg.STUDENT if (self.self_training and not self.teacher) else cfg.TEACHER
+        self.kldiv_loss = nn.KLDivLoss()
 
         # Training Parameters
         self.batch_size = cfg.DATA.BATCH_SIZE
@@ -93,8 +94,13 @@ class Trainer():
 
                 # forward pass
                 y_bar = self.model(x_bar)
-                
-                loss_mixup = lambda_ * self.bce_loss(y_bar, labels[inds1]) + (1. - lambda_) * self.bce_loss(y_bar, labels[inds2])
+               
+                if self.self_training and not self.teacher:
+                    probs = torch.sigmoid(y_bar)
+                    probs = torch.log(probs)
+                    loss_mixup = lambda_ * self.kldiv_loss(y_bar, labels[inds1]) + (1. - lambda_) * self.kldiv_loss(y_bar, labels[inds2])
+                else:
+                    loss_mixup = lambda_ * self.bce_loss(y_bar, labels[inds1]) + (1. - lambda_) * self.bce_loss(y_bar, labels[inds2])
                 loss_mixup = loss_mixup.sum()
 
                 if self.teacher and self.self_training:
@@ -172,11 +178,19 @@ class Trainer():
 
                 # forward pass
                 y_bar = self.model(x_bar)
-                
-                loss_mixup = lambda_ * self.bce_loss(y_bar, labels[inds1]) + (1. - lambda_) * self.bce_loss(y_bar, labels[inds2])
+               
+                if self.self_training and not self.teacher:
+                    probs = torch.sigmoid(y_bar)
+                    probs = torch.log(probs)
+                    loss_mixup = lambda_ * self.kldiv_loss(y_bar, labels[inds1]) + (1. - lambda_) * self.kldiv_loss(y_bar, labels[inds2])
+                else:
+                    loss_mixup = lambda_ * self.bce_loss(y_bar, labels[inds1]) + (1. - lambda_) * self.bce_loss(y_bar, labels[inds2])
                 loss_mixup = loss_mixup.sum()
 
-                loss += loss_mixup
+                if self.teacher and self.self_training:
+                    loss = loss_mixup
+                else:
+                    loss += loss_mixup
 
             if self.beta_c:
                 y_ = torch.sigmoid(y)
