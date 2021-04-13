@@ -26,7 +26,7 @@ class ChexpertDataset(Dataset):
                 transforms.ToPILImage(),
                 transforms.Lambda(lambda x: transforms.functional.equalize(x)),
                 transforms.ToTensor(),
-            ])
+        ])
         if split == "train":
             assert cfg.DATA.BATCH_SIZE <= cfg.DATA.LABELED_SIZE, "Batch size must be smaller than train size."
             self.annotations = self.annotations.sample(frac=1).reset_index(drop=True)
@@ -63,6 +63,15 @@ class ChexpertDatasetUnlabeled(Dataset):
         self.transforms = transforms.Compose([
                 transforms.Resize((self.height, self.width)),
                 transforms.ToTensor(),
+                transforms.Normalize(128, 64),
+                transforms.ToPILImage(),
+                transforms.Lambda(lambda x: transforms.functional.equalize(x)),
+                transforms.ToTensor(),
+                transforms.RandomAffine(
+                    degrees=(-15, 15),
+                    translate=(0.05, 0.05),
+                    scale=(0.95, 1.05)
+                ),
         ])
 
     def __len__(self) -> int:
@@ -81,10 +90,11 @@ def build_dataloader(split):
     ds_path = Path(cfg.DATA.PATH)
     bs = cfg.DATA.BATCH_SIZE
 
+    is_train = split == 'train'
     dataset = ChexpertDataset(ds_path / f"{split}.csv", split)
-    dl_labeled = DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 12), shuffle=split == "train")
+    dl_labeled = DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 12), shuffle=is_train)
     dl_unlabeled = None
     if split == 'train':
         dataset_u = ChexpertDatasetUnlabeled(ds_path / f'{split}.csv', dataset.annotations)
-        dl_unlabeled = DataLoader(dataset_u, batch_size=bs, num_workers=min(os.cpu_count(), 12), shuffle=split == "train")
+        dl_unlabeled = DataLoader(dataset_u, batch_size=bs, num_workers=min(os.cpu_count(), 12), shuffle=is_train)
     return dl_labeled, dl_unlabeled

@@ -6,7 +6,6 @@ import sklearn.metrics as metrics
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
 from utils.config import _C as cfg
@@ -30,19 +29,19 @@ class Trainer():
         self.teacher = not self.student
         self.mode = 'teacher' if self.teacher else 'student'
         cfg_trn_node = cfg.STUDENT if (self.self_training and not self.teacher) else cfg.TEACHER
-
+        
         # Training Parameters
         self.batch_size = cfg.DATA.BATCH_SIZE
         self.num_epochs = cfg_trn_node.EPOCHS
         self.iterations_per_epoch = len(self.train_loader)
         self.max_iters = self.num_epochs * self.iterations_per_epoch
         self.bce_loss = nn.BCEWithLogitsLoss()
-        self.kldiv_loss = nn.KLDivLoss()
+        self.kldiv_loss = nn.KLDivLoss(reduction='batchmean')
         self.iterations = 0
         
         # Training Hyperparameters
-        self.beta_u = cfg_trn_node.BETA_U
         self.beta_l = cfg_trn_node.BETA_L
+        self.beta_u = cfg_trn_node.BETA_U
         self.beta_c = cfg_trn_node.BETA_C
         self.mixup_alpha = cfg.SOLVER.MIXUP_ALPHA
 
@@ -51,6 +50,12 @@ class Trainer():
         self.train_recording_interval = self.iterations_per_epoch // self.train_recording_interval_per_epoch
         self.output_dir = Path(output_dir)
         self.writer = SummaryWriter(self.output_dir / self.mode, flush_secs=60)
+
+        # Parameter checks
+        if self.self_training:
+            assert self.mixup_alpha, "Self-Training can only be run with a non-zero mixup alpha."
+        if self.student:
+            self.teacher_model.eval()
 
 
     def train(self):
@@ -62,19 +67,13 @@ class Trainer():
             if self.iterations >= self.max_iters:
                 break
         t.close()
+        self.validate(split='test')
     
     def train_epoch(self, t):
         self.model.train()
         unlabeled_iterator = iter(self.train_loader_u)
         for batch_idx, (imgs, labels) in enumerate(self.train_loader):
             imgs, labels = imgs.to(self.device), labels.to(self.device)
-            
-            if self.student:
-                try:
-                    imgs_unlabeled = unlabeled_iterator.next().to(self.device)
-                except StopIteration:
-                    unlabeled_iterator = iter(self.train_loader_u)
-                    imgs_unlabeled = unlabeled_iterator.next().to(self.device)
 
             self.optimizer.zero_grad(set_to_none=True)
             y = self.model(imgs)
@@ -82,6 +81,17 @@ class Trainer():
 
             auc = self.get_auc(labels, y)
             prc = self.get_prc(labels, y)
+
+            if self.student:
+                try:
+                    imgs_unlabeled = unlabeled_iterator.next().to(self.device)
+                except StopIteration:
+                    unlabeled_iterator = iter(self.train_loader_u)
+                    imgs_unlabeled = unlabeled_iterator.next().to(self.device)
+                with torch.no_grad():
+                    gamma = 0.5
+                    yhat_u = self.teacher_model(imgs_unlabeled)
+                    yhat_u = (1-gamma)*yhat_u + gamma*torch.sigmoid(yhat_u - 0.5)
 
             if self.mixup_alpha:
                 # what is alpha --> see mixup reference
@@ -94,27 +104,22 @@ class Trainer():
                 inds1 = torch.arange(imgs.shape[0])
                 inds2 = torch.randperm(imgs.shape[0])
 
-                x_bar = lambda_ * imgs[inds1] + (1. - lambda_) * imgs[inds2]
+                x_bar = imgs if self.teacher else imgs_unlabeled
+                labels_ = labels if self.teacher else yhat_u
+
+                x_tilde = lambda_ * x_bar[inds1] + (1. - lambda_) * x_bar[inds2]
 
                 # forward pass
-                y_bar = self.model(x_bar)
+                y_bar = self.model(x_tilde)
                
-                if self.self_training and not self.teacher:
-                    probs = torch.sigmoid(y_bar)
-                    probs = torch.log(probs)
-                    loss_mixup = lambda_ * self.kldiv_loss(y_bar, labels[inds1]) + (1. - lambda_) * self.kldiv_loss(y_bar, labels[inds2])
-                else:
-                    loss_mixup = lambda_ * self.bce_loss(y_bar, labels[inds1]) + (1. - lambda_) * self.bce_loss(y_bar, labels[inds2])
+                loss_fn = self.kldiv_loss if self.student else self.bce_loss
+                loss_mixup = lambda_ * loss_fn(y_bar, labels_[inds1]) + (1. - lambda_) * loss_fn(y_bar, labels_[inds2])
                 loss_mixup = loss_mixup.sum()
 
                 if self.teacher and self.self_training:
                     loss = loss_mixup
                 else:
-                    loss += loss_mixup
-
-
-            if self.student:
-                pass
+                    loss = self.beta_l*loss + self.beta_u*loss_mixup
 
             if self.beta_c:
                 y_ = torch.sigmoid(y)
@@ -145,7 +150,6 @@ class Trainer():
         
         # validation
         self.validate(split='val')
-        self.validate(split='test')
 
         # save model
         torch.save(self.model.state_dict(), self.output_dir / f'model-{self.iterations:05d}_{self.mode}.pth')
@@ -156,7 +160,7 @@ class Trainer():
         self.model.eval()
         losses, aucs, prcs = [], [], []
 
-        for batch_idx, (imgs, labels) in enumerate(tqdm(eval(f'self.{split}_loader'), position=1, leave=False)):
+        for batch_idx, (imgs, labels) in enumerate(tqdm(eval(f'self.{split}_loader'), position=1, leave=False, dynamic_ncols=True)):
             imgs, labels = imgs.to(self.device), labels.to(self.device) 
 
             # forward pass
@@ -171,6 +175,8 @@ class Trainer():
                 # what is alpha --> see mixup reference
                 # "additional samples" --> is there a regular non-mixup loss?
                 # y_bar equation in paper is not used?
+                # Unlabeled data not necessary for validation. Accordingly, L_dist is not applicable, 
+                # so just use regular mixup loss for logging purposes.
 
                 # generate mixup parameter
                 lambda_ = np.random.beta(self.mixup_alpha, self.mixup_alpha)
@@ -178,23 +184,19 @@ class Trainer():
                 inds1 = torch.arange(imgs.shape[0])
                 inds2 = torch.randperm(imgs.shape[0])
 
-                x_bar = lambda_ * imgs[inds1] + (1. - lambda_) * imgs[inds2]
+                x_bar = imgs
+                labels_ = labels
+
+                x_tilde = lambda_ * x_bar[inds1] + (1. - lambda_) * x_bar[inds2]
 
                 # forward pass
-                y_bar = self.model(x_bar)
+                y_bar = self.model(x_tilde)
                
-                if self.self_training and not self.teacher:
-                    probs = torch.sigmoid(y_bar)
-                    probs = torch.log(probs)
-                    loss_mixup = lambda_ * self.kldiv_loss(y_bar, labels[inds1]) + (1. - lambda_) * self.kldiv_loss(y_bar, labels[inds2])
-                else:
-                    loss_mixup = lambda_ * self.bce_loss(y_bar, labels[inds1]) + (1. - lambda_) * self.bce_loss(y_bar, labels[inds2])
+                loss_fn = self.bce_loss
+                loss_mixup = lambda_ * loss_fn(y_bar, labels_[inds1]) + (1. - lambda_) * loss_fn(y_bar, labels_[inds2])
                 loss_mixup = loss_mixup.sum()
 
-                if self.teacher and self.self_training:
-                    loss = loss_mixup
-                else:
-                    loss += loss_mixup
+                loss = self.beta_l*loss + self.beta_u*loss_mixup
 
             if self.beta_c:
                 y_ = torch.sigmoid(y)
@@ -207,6 +209,9 @@ class Trainer():
         self.writer.add_scalar(f"{split}/loss", np.mean(losses), self.iterations // self.iterations_per_epoch)
         self.writer.add_scalar(f"{split}/auc", np.nanmean(aucs), self.iterations // self.iterations_per_epoch)
         self.writer.add_scalar(f"{split}/prc", np.mean(prcs), self.iterations // self.iterations_per_epoch)
+
+        if split == 'test':
+            print(f"\nLoss: {np.mean(losses):.3f} | W-AUC: {np.nanmean(aucs):.3f} | W-PRC: {np.mean(prcs):.3f}\n")
                 
     def get_auc(self, labels, y):
         try:
