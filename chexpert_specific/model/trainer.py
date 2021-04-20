@@ -62,14 +62,15 @@ class Trainer():
         print(f"Training the {self.mode}...")
         t = tqdm(range(self.max_iters), dynamic_ncols=True)
         for epoch in range(self.num_epochs):
-            self.train_epoch(t)
+            self.train_epoch(t, epoch)
             self.scheduler.step()
             if self.iterations >= self.max_iters:
                 break
         t.close()
         self.validate(split='test')
+        self.writer.flush()
     
-    def train_epoch(self, t):
+    def train_epoch(self, t, epoch):
         self.model.train()
         unlabeled_iterator = iter(self.train_loader_u)
         for batch_idx, (imgs, labels) in enumerate(self.train_loader):
@@ -92,6 +93,8 @@ class Trainer():
                     gamma = 0.5
                     yhat_u = self.teacher_model(imgs_unlabeled)
                     yhat_u = (1-gamma)*yhat_u + gamma*torch.sigmoid(yhat_u - 0.5)
+                    yhat_u = yhat_u.sigmoid()
+                    yhat_u /= yhat_u.sum(dim=1, keepdim=True)
 
             if self.mixup_alpha:
                 # what is alpha --> see mixup reference
@@ -111,10 +114,26 @@ class Trainer():
 
                 # forward pass
                 y_bar = self.model(x_tilde)
-               
-                loss_fn = self.kldiv_loss if self.student else self.bce_loss
+                
+                loss_fn = self.bce_loss
+                if self.student:
+                    loss_fn = self.kldiv_loss
+                    y_bar = y_bar.sigmoid()
+                    y_bar = torch.log(y_bar / y_bar.sum(dim=1, keepdim=True))
+                    # print(labels_[0])
+                    # print(labels_[0].sum())
+                    # print(y_bar[0])
+                    # print(y_bar[0].sum())
+                    # exit()
                 loss_mixup = lambda_ * loss_fn(y_bar, labels_[inds1]) + (1. - lambda_) * loss_fn(y_bar, labels_[inds2])
                 loss_mixup = loss_mixup.sum()
+                # if loss_mixup < 0:
+                #     print("NEGATIVE LOSS")
+                #     print(labels_[0])
+                #     print(labels_[0].sum())
+                #     print(y_bar[0])
+                #     print(loss_mixup)
+                #     exit()
 
                 if self.teacher and self.self_training:
                     loss = loss_mixup
@@ -148,7 +167,6 @@ class Trainer():
             if self.iterations >= self.max_iters:
                 break
         
-        # validation
         self.validate(split='val')
 
         # save model
