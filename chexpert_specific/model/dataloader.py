@@ -96,6 +96,6 @@ def build_dataloader(split):
     dl_unlabeled = None
     if split == 'train':
         dataset_u = ChexpertDatasetUnlabeled(ds_path / f'{split}.csv', dataset.annotations)
-        bs = cfg.DATA.UNLABELED_SIZE // (cfg.DATA.LABELED_SIZE / bs)
+        # bs = cfg.DATA.UNLABELED_SIZE // (cfg.DATA.LABELED_SIZE / bs)
         dl_unlabeled = DataLoader(dataset_u, batch_size=int(bs), num_workers=min(os.cpu_count(), 12), shuffle=is_train)
     return dl_labeled, dl_unlabeled
