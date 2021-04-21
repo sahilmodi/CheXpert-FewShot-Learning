@@ -84,17 +84,24 @@ class Trainer():
             prc = self.get_prc(labels, y)
 
             if self.student:
-                try:
-                    imgs_unlabeled = unlabeled_iterator.next().to(self.device)
-                except StopIteration:
-                    unlabeled_iterator = iter(self.train_loader_u)
-                    imgs_unlabeled = unlabeled_iterator.next().to(self.device)
+                gamma = 0.5
+                # try:
+                #     imgs_unlabeled = unlabeled_iterator.next().to(self.device)
+                # except StopIteration:
+                #     unlabeled_iterator = iter(self.train_loader_u)
+                #     imgs_unlabeled = unlabeled_iterator.next().to(self.device)
+                # with torch.no_grad():
+                    # yhat_u = self.teacher_model(imgs_unlabeled).sigmoid()
+                yhat_u = []
+                imgs_unlabeled = unlabeled_iterator.next().to(self.device)
                 with torch.no_grad():
-                    gamma = 0.5
-                    yhat_u = self.teacher_model(imgs_unlabeled)
-                    yhat_u = (1-gamma)*yhat_u + gamma*torch.sigmoid(yhat_u - 0.5)
-                    yhat_u = yhat_u.sigmoid()
-                    yhat_u /= yhat_u.sum(dim=1, keepdim=True)
+                    for b in range(0, imgs_unlabeled.shape[0], imgs.shape[0]):
+                        minibatch = imgs_unlabeled[b:b+imgs.shape[0]]
+                        out = self.teacher_model(minibatch)
+                        yhat_u.append(out)
+                yhat_u = torch.cat(yhat_u, dim=0)
+                yhat_u = (1-gamma)*yhat_u + gamma*torch.sigmoid(1e8 * (yhat_u - 0.5))
+                yhat_u /= yhat_u.sum(dim=1, keepdim=True)
 
             if self.mixup_alpha:
                 # what is alpha --> see mixup reference
@@ -120,20 +127,16 @@ class Trainer():
                     loss_fn = self.kldiv_loss
                     y_bar = y_bar.sigmoid()
                     y_bar = torch.log(y_bar / y_bar.sum(dim=1, keepdim=True))
-                    # print(labels_[0])
-                    # print(labels_[0].sum())
-                    # print(y_bar[0])
-                    # print(y_bar[0].sum())
-                    # exit()
+
                 loss_mixup = lambda_ * loss_fn(y_bar, labels_[inds1]) + (1. - lambda_) * loss_fn(y_bar, labels_[inds2])
                 loss_mixup = loss_mixup.sum()
-                # if loss_mixup < 0:
-                #     print("NEGATIVE LOSS")
-                #     print(labels_[0])
-                #     print(labels_[0].sum())
-                #     print(y_bar[0])
-                #     print(loss_mixup)
-                #     exit()
+                if loss_mixup < 0:
+                    print("NEGATIVE LOSS")
+                    print(labels_[0])
+                    print(labels_[0].sum())
+                    print(y_bar[0])
+                    print(loss_mixup)
+                    exit()
 
                 if self.teacher and self.self_training:
                     loss = loss_mixup
