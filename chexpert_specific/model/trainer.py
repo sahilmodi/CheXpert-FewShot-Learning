@@ -170,7 +170,7 @@ class Trainer():
             if self.iterations >= self.max_iters:
                 break
         
-        # self.validate(split='val')
+        self.validate(split='val')
 
         # save model
         torch.save(self.model.state_dict(), self.output_dir / f'model-{self.iterations:05d}_{self.mode}.pth')
