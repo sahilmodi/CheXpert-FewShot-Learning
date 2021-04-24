@@ -1,6 +1,6 @@
 .vscode/
 CheXpert-v1.0-small/
-outputs/
+outputs*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
