@@ -19,4 +19,4 @@ MAML:
   N_WAY: 5 # 1 or 5
   K_SHOT: 3 # 15
   K_QUERY: 2
-  NOVEL: [26, 27, 28, 29, 30]
+  NOVEL_CLASSES: [26, 27, 28, 29, 30]
