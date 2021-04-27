@@ -23,3 +23,12 @@ for spl in ["train", "val", "test"]:
 
 df = pd.DataFrame(counts, columns=["Dataset", "Patients", "Images"] + classes)
 print(df)
+
+for spl in ["train", "val", "test"]:
+    cls_counts = [0] * 32
+    df = eval(spl).fillna(0)
+    for idx, row in df[classes].iterrows():
+        binary = '0b' + "".join([str(int(row[c])) for c in classes])
+        binary = int(binary, 2)
+        cls_counts[binary] += 1
+    print(spl, cls_counts)

@@ -11,6 +11,7 @@ import torchvision.models as models
 from torch.optim.lr_scheduler import StepLR
 
 sys.path.append(str(Path(__file__).parent.parent))
+from utils.misc import set_seed
 from utils.config import _C as cfg
 from chexpert_specific.model.dataloader import build_dataloader
 from chexpert_specific.model.trainer import Trainer
@@ -29,19 +30,8 @@ def parse_args():
     parser.add_argument('--output', required=True, type=str, default='sample', help='Name of output directory')
     parser.add_argument('--gpu', type=int, required=True, help='GPU ID')
     parser.add_argument('--seed', type=int, help='set random seed use this command', default=0)
+    parser.add_argument('--teacher-init', type=str, help="Restore teacher model from this path")
     return parser.parse_args()
-
-
-def set_seed(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    np.random.seed(seed)
-    random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
 
 
 def main():
@@ -74,7 +64,6 @@ def main():
     for i in range(int(cfg.SOLVER.SELF_TRAINING) + 1):
         model = Net().to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=cfg.SOLVER.BASE_LR, weight_decay=cfg.SOLVER.WEIGHT_DECAY)
-    
         scheduler = StepLR(optimizer, step_size=cfg.SOLVER.SCHEDULER_STEP_SIZE, gamma=0.1)
 
         kwargs = {
@@ -91,7 +80,12 @@ def main():
         trainer = Trainer(**kwargs)
 
         try:
-            trainer.train()
+            if i == 0 and args.teacher_init:
+                model.load_state_dict(torch.load(args.teacher_init))
+                print("Loaded teacher model from", args.teacher_init)
+                trainer.validate('test')
+            else:
+                trainer.train()
             teacher_model = model
         except BaseException:
             if len(glob(f"{output_dir}/*.pth")) < 1:

@@ -13,14 +13,10 @@ SOLVER:
   MIXUP_ALPHA: 0.0
   SELF_TRAINING: False
 
-TEACHER:
-  EPOCHS: 15
-  BETA_L: 1.0
-  BETA_U: 1.0 # default value for both regular and self-training teacher.
-  BETA_C: 0.0 # (0.1, 0.25)
-
-STUDENT:
-  EPOCHS: 15
-  BETA_L: 0.9
-  BETA_U: 0.8
-  BETA_C: 0.0 # (0.1, 0.25)
+MAML:
+  RUN: True
+  N_TASKS: 10
+  N_WAY: 5 # 1 or 5
+  K_SHOT: 3 # 15
+  K_QUERY: 2
+  NOVEL_CLASSES: [26, 27, 28, 29, 30]
