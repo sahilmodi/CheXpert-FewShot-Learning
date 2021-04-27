@@ -1,0 +1,22 @@
+OUTPUT_ROOT_DIR: './outputs'
+
+DATA:
+  PATH: '/home/smodi9/CheXpert-v1.0-small/'
+  BATCH_SIZE: 100
+  LABELED_SIZE: 20_000
+  UNLABELED_SIZE: 15_000
+
+SOLVER:
+  BASE_LR: 1.0e-4
+  SCHEDULER_STEP_SIZE: 10
+  WEIGHT_DECAY: 1.0e-4
+  MIXUP_ALPHA: 0.0
+  SELF_TRAINING: False
+
+MAML:
+  RUN: True
+  N_TASKS: 10
+  N_WAY: 5 # 1 or 5
+  K_SHOT: 3 # 15
+  K_QUERY: 2
+  NOVEL: [26, 27, 28, 29, 30]

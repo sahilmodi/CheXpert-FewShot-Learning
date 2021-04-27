@@ -11,6 +11,7 @@ import torchvision.models as models
 from torch.optim.lr_scheduler import StepLR
 
 sys.path.append(str(Path(__file__).parent.parent))
+from utils.misc import set_seed
 from utils.config import _C as cfg
 from chexpert_specific.model.dataloader import build_dataloader
 from chexpert_specific.model.trainer import Trainer
@@ -31,18 +32,6 @@ def parse_args():
     parser.add_argument('--seed', type=int, help='set random seed use this command', default=0)
     parser.add_argument('--teacher-init', type=str, help="Restore teacher model from this path")
     return parser.parse_args()
-
-
-def set_seed(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    np.random.seed(seed)
-    random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
 
 
 def main():
