@@ -1,6 +1,7 @@
 from __future__ import print_function
-from dataset.chexpert_helper import get_data
 from yacs.config import CfgNode
+from pathlib import Path
+import pandas as pd
 
 import os
 from PIL import Image
@@ -10,47 +11,43 @@ import torch
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 
+def convert_label(label):
+    str_repr = "".join(map(str, label))
+    num_repr = int(str_repr, 2)
+    return num_repr
 
 class Chexpert(Dataset):
     """support Chexpert dataset"""
-    def __init__(self, args, partition='train', pretrain=True, is_sample=False, k=4096, transform=None):
+    def __init__(self, args, partition='train', pretrain=True, is_sample=False, k=4096):
         super(Dataset, self).__init__()
-        self.data_root = args.data_root
+        self.data_root = Path(args.data_root)
         self.partition = partition
         self.data_aug = args.data_aug
         self.pretrain = pretrain
 
-        if transform is None:
-            if self.partition == 'train' and self.data_aug:
-                self.transform = transforms.Compose([
-                    transforms.Resize((224, 224)),
-                    transforms.ToPILImage(),
-                    transforms.RandomAffine(
-                        degrees=(-15, 15),
-                        translate=(0.05, 0.05),
-                        scale=(0.95, 1.05)
-                    ),
-                    transforms.ToTensor(),
-                ])
-            else:
-                self.transform = transforms.Compose([
-                    transforms.Resize((224, 224)),
-                ])
-        else:
-            self.transform = transform
+        self.annotations = pd.read_csv(self.data_root / f"{partition}.csv").fillna(0)
+        self.transform = None
+        self.height, self.width = 224, 224
+        self.transform = transforms.Compose([
+                transforms.Resize((self.height, self.width)),
+                transforms.ToTensor(),
+                transforms.Normalize(128, 64),
+                transforms.ToPILImage(),
+                transforms.Lambda(lambda x: transforms.functional.equalize(x)),
+                transforms.ToTensor(),
+            ])
+        if self.data_aug:
+            self.transform = transforms.Compose([
+                self.transform,
+                transforms.RandomAffine(
+                    degrees=(-15, 15),
+                    translate=(0.05, 0.05),
+                    scale=(0.95, 1.05)
+                ),
+            ])
 
-        # build a config node
-        cfg = CfgNode()
-        cfg.BATCH_SIZE = 128
-        cfg.NUM_WORKERS = 1
-        cfg.PATH = self.data_root
-    
-        print("- Starting to get data in dictionary form")
-        data = get_data(cfg, partition)
-        print("- Finished getting data in dictionary form")
-
-        self.imgs = data["data"]
-        self.labels = data["labels"]
+        # gather all labels in memory
+        self.labels = list(map(convert_label, self.annotations[['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']].values.astype(np.int8)))
 
         # pre-process for contrastive sampling
         self.k = k
@@ -61,7 +58,7 @@ class Chexpert(Dataset):
             num_classes = np.max(self.labels) + 1
 
             self.cls_positive = [[] for _ in range(num_classes)]
-            for i in range(len(self.imgs)):
+            for i in range(len(self.labels)):
                 self.cls_positive[self.labels[i]].append(i)
 
             self.cls_negative = [[] for _ in range(num_classes)]
@@ -75,10 +72,12 @@ class Chexpert(Dataset):
             self.cls_negative = [np.asarray(self.cls_negative[i]) for i in range(num_classes)]
             self.cls_positive = np.asarray(self.cls_positive)
             self.cls_negative = np.asarray(self.cls_negative)
+        print("LABELS:", len(self.labels))
 
     def __getitem__(self, item):
-        img = np.asarray(self.imgs[item]).astype('uint8')
-        img = self.transform(torch.Tensor(img))
+        annotation = self.annotations.iloc[item]
+        img = Image.open(self.data_root.parent / annotation['Path'])
+        img = self.transform(img).repeat(3, 1, 1)
         target = self.labels[item] - min(self.labels)
 
         if not self.is_sample:
@@ -104,34 +103,23 @@ class MetaChexpert(Chexpert):
         self.n_queries = args.n_queries
         self.n_test_runs = args.n_test_runs
         self.n_aug_support_samples = args.n_aug_support_samples
-        if train_transform is None:
-            self.train_transform = transforms.Compose([
-                    transforms.Resize((224, 224)),
-                    transforms.ToPILImage(),
-                    transforms.RandomAffine(
-                        degrees=(-15, 15),
-                        translate=(0.05, 0.05),
-                        scale=(0.95, 1.05)
-                    ),
-                    transforms.ToTensor(),
-                ])
+        self.train_transform = transforms.Compose([
+                self.transform,
+                transforms.RandomAffine(
+                    degrees=(-15, 15),
+                    translate=(0.05, 0.05),
+                    scale=(0.95, 1.05)
+                ),
+            ])
+        self.test_transform = self.transform
 
-        else:
-            self.train_transform = train_transform
-
-        if test_transform is None:
-            self.test_transform = transforms.Compose([
-                    transforms.Resize((224, 224)),
-                ])
-        else:
-            self.test_transform = test_transform
-        
+        print("LABELS:", len(self.labels))
         self.data = {}
-        for idx in range(self.imgs.shape[0]):
-            if self.labels[idx] not in self.data:
-                self.data[self.labels[idx]] = []
-            self.data[self.labels[idx]].append(self.imgs[idx])
-        self.classes = list(self.data.keys())
+        # for idx in range(self.imgs.shape[0]):
+        #     if self.labels[idx] not in self.data:
+        #         self.data[self.labels[idx]] = []
+        #     self.data[self.labels[idx]].append(self.imgs[idx])
+        # self.classes = list(self.data.keys())
 
     def __getitem__(self, item):
         if self.fix_seed:
@@ -187,7 +175,7 @@ if __name__ == '__main__':
     print(len(chexpert))
     print(chexpert.__getitem__(500)[0].shape)
 
-    metachexpert = MetaChexpert(args, 'val')
+    metachexpert = MetaChexpert(args, 'train')
     print(len(metachexpert))
     print("support_xs: ", metachexpert.__getitem__(500)[0].size())
     print("support_ys: ", metachexpert.__getitem__(500)[1].shape)
