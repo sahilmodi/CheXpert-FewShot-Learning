@@ -1,6 +1,5 @@
 import  torch, os
 import  numpy as np
-from    MiniImagenet import MiniImagenet
 import  scipy.stats
 from    torch.utils.data import DataLoader
 from    torch.optim import lr_scheduler
@@ -15,7 +14,8 @@ sys.path.append(str(Path(__file__).parent.parent))
 from utils.misc import set_seed
 from utils.config import _C as cfg
 
-from meta import Meta
+from maml.model.trainer import Trainer
+from maml.fewshot_dataloader import build_dataloader
 
 def parse_args():
     argparser = argparse.ArgumentParser()
@@ -78,7 +78,7 @@ def main():
     ]
 
     device = torch.device('cuda')
-    maml = Meta(args, config).to(device)
+    maml = Trainer().to(device)
 
     tmp = filter(lambda x: x.requires_grad, maml.parameters())
     num = sum(map(lambda x: np.prod(x.shape), tmp))
