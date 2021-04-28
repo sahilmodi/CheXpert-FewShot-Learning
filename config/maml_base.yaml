@@ -13,7 +13,7 @@ SOLVER:
   SELF_TRAINING: False
 
 MAML:
-  RUN: True
+  EPOCHS: 1000
   N_TASKS: 10
   N_WAY: 5 # 1 or 5
   K_SHOT: 3 # 15

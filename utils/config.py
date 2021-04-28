@@ -38,7 +38,7 @@ _C.STUDENT.BETA_U = 0.8
 _C.STUDENT.BETA_C = 0.15
 
 _C.MAML = CfgNode()
-_C.MAML.RUN = False
+_C.MAML.EPOCHS = 0
 _C.MAML.N_TASKS = 0
 _C.MAML.N_WAY = 0 # 1 or 5
 _C.MAML.K_SHOT = 0 # 15
