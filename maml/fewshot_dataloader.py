@@ -85,7 +85,10 @@ def build_dataloader(split):
     assert split in valid_splits, f"{split} should be one of {valid_splits}."
 
     dataset = ChexpertDataset(Path(cfg.DATA.PATH) / f"{split}.csv", split)
-    dl_labeled = DataLoader(dataset, batch_size=cfg.DATA.BATCH_SIZE, num_workers=min(os.cpu_count(), 12))
+    bs = 1
+    if split == 'train':
+        bs = cfg.DATA.BATCH_SIZE
+    dl_labeled = DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 12))
     return dl_labeled
 
 
