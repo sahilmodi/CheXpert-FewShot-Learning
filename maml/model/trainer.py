@@ -49,12 +49,12 @@ class Trainer(nn.Module):
         task_num, setz, c_, h, w = x_support.shape
         querysz = x_query.shape[1]
 
-        losses_q = [0 for _ in range(self.update_step + 1)]  # losses_q[i] is the loss on step i
-        corrects = [0 for _ in range(self.update_step + 1)]
+        losses_q = [0 for _ in range(self.num_updates + 1)]  # losses_q[i] is the loss on step i
+        corrects = [0 for _ in range(self.num_updates + 1)]
 
         for i in range(task_num):
             # 1. run the i-th task and compute loss for k=0
-            logits = self.net(x_support[i], vars=None, bn_training=True)
+            logits = self.net(x_support[i], vars=None)
             loss = F.cross_entropy(logits, y_support[i])
             grad = torch.autograd.grad(loss, self.net.parameters())
             fast_weights = list(map(lambda p: p[1] - self.update_lr * p[0], zip(grad, self.net.parameters())))
@@ -62,7 +62,7 @@ class Trainer(nn.Module):
             # this is the loss and accuracy before first update
             with torch.no_grad():
                 # [setsz, nway]
-                logits_q = self.net(x_query[i], self.net.parameters(), bn_training=True)
+                logits_q = self.net(x_query[i], self.net.parameters())
                 loss_q = F.cross_entropy(logits_q, y_query[i])
                 losses_q[0] += loss_q
 
@@ -73,7 +73,7 @@ class Trainer(nn.Module):
             # this is the loss and accuracy after the first update
             with torch.no_grad():
                 # [setsz, nway]
-                logits_q = self.net(x_query[i], fast_weights, bn_training=True)
+                logits_q = self.net(x_query[i], fast_weights)
                 loss_q = F.cross_entropy(logits_q, y_query[i])
                 losses_q[1] += loss_q
                 # [setsz]
@@ -83,14 +83,14 @@ class Trainer(nn.Module):
 
             for k in range(1, self.num_updates):
                 # 1. run the i-th task and compute loss for k=1~K-1
-                logits = self.net(x_support[i], fast_weights, bn_training=True)
+                logits = self.net(x_support[i], fast_weights)
                 loss = F.cross_entropy(logits, y_support[i])
                 # 2. compute grad on theta_pi
                 grad = torch.autograd.grad(loss, fast_weights)
                 # 3. theta_pi = theta_pi - train_lr * grad
                 fast_weights = list(map(lambda p: p[1] - self.update_lr * p[0], zip(grad, fast_weights)))
 
-                logits_q = self.net(x_query[i], fast_weights, bn_training=True)
+                logits_q = self.net(x_query[i], fast_weights)
                 # loss_q will be overwritten and just keep the loss_q on last update step.
                 loss_q = F.cross_entropy(logits_q, y_query[i])
                 losses_q[k + 1] += loss_q
@@ -141,7 +141,7 @@ class Trainer(nn.Module):
         # this is the loss and accuracy before first update
         with torch.no_grad():
             # [setsz, nway]
-            logits_q = net(x_query, net.parameters(), bn_training=True)
+            logits_q = net(x_query, net.parameters())
             # [setsz]
             pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
             # scalar
@@ -151,7 +151,7 @@ class Trainer(nn.Module):
         # this is the loss and accuracy after the first update
         with torch.no_grad():
             # [setsz, nway]
-            logits_q = net(x_query, fast_weights, bn_training=True)
+            logits_q = net(x_query, fast_weights)
             # [setsz]
             pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
             # scalar
@@ -160,14 +160,14 @@ class Trainer(nn.Module):
 
         for k in range(1, self.num_updates):
             # 1. run the i-th task and compute loss for k=1~K-1
-            logits = net(x_support, fast_weights, bn_training=True)
+            logits = net(x_support, fast_weights)
             loss = F.cross_entropy(logits, y_support)
             # 2. compute grad on theta_pi
             grad = torch.autograd.grad(loss, fast_weights)
             # 3. theta_pi = theta_pi - train_lr * grad
             fast_weights = list(map(lambda p: p[1] - self.update_lr * p[0], zip(grad, fast_weights)))
 
-            logits_q = net(x_query, fast_weights, bn_training=True)
+            logits_q = net(x_query, fast_weights)
             # loss_q will be overwritten and just keep the loss_q on last update step.
             loss_q = F.cross_entropy(logits_q, y_query)
 

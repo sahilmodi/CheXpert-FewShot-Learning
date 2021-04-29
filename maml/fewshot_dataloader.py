@@ -32,7 +32,7 @@ class ChexpertDataset(Dataset):
         self.size_query = self.n_way * self.k_query
         self.novel_classes = cfg.MAML.NOVEL_CLASSES
 
-        assert len(self.novel_classes) >= self.n_way, f"There should be at least {self.n_way} novel classes."
+        assert len(self.novel_classes) >= self.n_way, f"There should be at least {self.n_way} novel classes in {split}."
 
         novel_classes_idxs = self.annotations['Binary Class'].isin(self.novel_classes)
         if split == 'train':
@@ -45,7 +45,7 @@ class ChexpertDataset(Dataset):
             df = self.annotations[self.annotations['Binary Class'] == cls_name]
             if df.empty:
                 continue
-            assert len(df) >= self.k_shot + self.k_query, f"Class {cls_name} only has {len(df)} examples, {self.k_shot + self.k_query} expected."
+            assert len(df) >= self.k_shot + self.k_query, f"Class {cls_name} only has {len(df)} examples, {self.k_shot + self.k_query} expected in {split}."
             df = df.sample(frac=1).reset_index(drop=True)
             df = df.iloc[:self.k_shot + self.k_query]
             self.class_df_map[cls_name] = df

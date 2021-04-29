@@ -1,8 +1,8 @@
-OUTPUT_ROOT_DIR: './outputs'
+OUTPUT_ROOT_DIR: './outputs/maml'
 
 DATA:
   PATH: '/home/smodi9/CheXpert-v1.0-small/'
-  BATCH_SIZE: 100
+  BATCH_SIZE: 4
   LABELED_SIZE: 20_000
   UNLABELED_SIZE: 15_000
 
@@ -18,7 +18,7 @@ MAML:
   N_WAY: 5 # 1 or 5
   K_SHOT: 3 # 15
   K_QUERY: 2
-  NOVEL_CLASSES: [26, 27, 28, 29, 30]
+  NOVEL_CLASSES: [1, 2, 8, 16, 23]
   ALPHA: 1.0e-2
   BETA: 1.0e-3
   N_INNER_UPDATES: 1
