@@ -3,6 +3,7 @@ import  numpy as np
 import  scipy.stats
 from    torch.utils.data import DataLoader
 from    torch.optim import lr_scheduler
+from tqdm import tqdm
 import  random, sys, pickle
 import  argparse
 
@@ -75,7 +76,7 @@ def main():
 
     tmp = filter(lambda x: x.requires_grad, maml.parameters())
     num = sum(map(lambda x: np.prod(x.shape), tmp))
-    print(maml)
+    # print(maml)
     print('Total trainable tensors:', num)
 
     # batchsz here means total episode number
@@ -93,24 +94,26 @@ def main():
 
     print("Train Batches:", len(train_loader), "| Val Batches:", len(val_loader), "| Test Batches:", len(test_loader))
 
-    for epoch in range(cfg.MAML.EPOCHS):
+    postfix_map = {}
+    t = tqdm(range(cfg.MAML.EPOCHS), leave=True, dynamic_ncols=True)
+    for epoch in t:
         # fetch meta_batchsz num of episode each time
         # db = DataLoader(mini, args.task_num, shuffle=True, num_workers=1, pin_memory=True)
 
         # for step, (x_spt, y_spt, x_qry, y_qry) in enumerate(db):
-        for step, (x_spt, y_spt, x_qry, y_qry) in enumerate(train_loader):
+        for step, (x_spt, y_spt, x_qry, y_qry) in enumerate(tqdm(train_loader, position=1, dynamic_ncols=True, leave=False)):
 
             x_spt, y_spt, x_qry, y_qry = x_spt.to(device), y_spt.to(device), x_qry.to(device), y_qry.to(device)
             accs = maml(x_spt, y_spt, x_qry, y_qry)
 
             if step % 30 == 0:
-                print('step:', step, '\ttraining acc:', accs)
+                postfix_map["trAcc"] = accs
 
             if step % 500 == 0:  # evaluation
                 # db_test = DataLoader(mini_test, 1, shuffle=True, num_workers=1, pin_memory=True)
                 accs_all_test = []
 
-                for x_spt, y_spt, x_qry, y_qry in val_loader:
+                for x_spt, y_spt, x_qry, y_qry in tqdm(val_loader, desc="Validation", position=2, leave=False):
                     x_spt, y_spt, x_qry, y_qry = x_spt.squeeze(0).to(device), y_spt.squeeze(0).to(device), \
                                                  x_qry.squeeze(0).to(device), y_qry.squeeze(0).to(device)
 
@@ -119,7 +122,8 @@ def main():
 
                 # [b, update_step+1]
                 accs = np.array(accs_all_test).mean(axis=0).astype(np.float16)
-                print('Test acc:', accs)
+                postfix_map["valAcc"] = accs
+            t.set_postfix(postfix_map)
 
 
 if __name__ == '__main__':

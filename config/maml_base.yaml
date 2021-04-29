@@ -14,7 +14,7 @@ SOLVER:
 
 MAML:
   EPOCHS: 1000
-  N_TASKS: 10
+  N_TASKS: 1000
   N_WAY: 5 # 1 or 5
   K_SHOT: 3 # 15
   K_QUERY: 2
