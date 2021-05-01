@@ -9,7 +9,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
 
 from utils.config import _C as cfg
-from .utils import get_transforms
+from utils.transforms import get_transforms
 
 class ChexpertDataset(Dataset):
     def __init__(self, csv_path: Path, split: str) -> None:
@@ -45,7 +45,7 @@ class ChexpertDatasetUnlabeled(Dataset):
         self.data_path = Path(csv_path).parent
         labeled_size = cfg.DATA.LABELED_SIZE
         unlabeled_size = cfg.DATA.UNLABELED_SIZE
-        self.annotations = pd.read_csv(csv_path).fillna(0)[labeled_size:labeled_size + unlabeled_size].reset_index(drop=True)
+        self.annotations = shuffled_annotations[labeled_size:labeled_size + unlabeled_size].reset_index(drop=True)
         self.height, self.width = 224, 224
         self.transforms = get_transforms(self.height, self.width, 'train')
 

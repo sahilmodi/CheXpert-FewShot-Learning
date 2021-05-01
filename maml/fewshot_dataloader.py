@@ -6,12 +6,21 @@ from pathlib import Path
 
 import torch
 import PIL.Image as Image
+from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 
 sys.path.append(str(Path(__file__).absolute().parent.parent))
 from utils.config import _C as cfg
-from utils.transforms import get_transforms, label_to_binary_class
+from utils.transforms import label_to_binary_class
 from utils.misc import set_seed
+
+def get_transforms(height, width, split):
+    transform = transforms.Compose([
+        transforms.Resize((height, width)),
+        transforms.ToTensor(),
+        transforms.Normalize(128, 64),
+    ])
+    return transform
 
 class ChexpertDataset(Dataset):
     def __init__(self, csv_path: Path, split: str) -> None:
@@ -19,12 +28,12 @@ class ChexpertDataset(Dataset):
         self.data_path = Path(csv_path).parent
         self.annotations = pd.read_csv(csv_path).fillna(0)
         self.split = split
-        self.height, self.width = 224, 224
+        self.height, self.width = 84, 84
         self.class_strings = ['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']
         self.transforms = get_transforms(self.height, self.width, split)
         self.annotations['Binary Class'] = self.annotations.apply(lambda row: label_to_binary_class(row, self.class_strings), axis=1)
         
-        self.num_tasks = cfg.MAML.N_TASKS
+        self.num_tasks = cfg.MAML.N_TASKS_TRN
         self.n_way = cfg.MAML.N_WAY
         self.k_shot = cfg.MAML.K_SHOT
         self.k_query = cfg.MAML.K_QUERY
@@ -39,6 +48,7 @@ class ChexpertDataset(Dataset):
             self.annotations = self.annotations[~novel_classes_idxs]
         else:
             self.annotations = self.annotations[novel_classes_idxs]
+            self.num_tasks = cfg.MAML.N_TASKS_TST
 
         self.class_df_map = {}
         for cls_name in range(32):
@@ -59,6 +69,8 @@ class ChexpertDataset(Dataset):
         return self.num_tasks
 
     def _load_task_data(self, k, class_annotations):
+        relative_class_cntr = 0 # in [0, N_WAY)
+        relative_mapping = {}
         x = torch.FloatTensor(k, self.n_way, 3, self.height, self.width)
         y = torch.LongTensor(k, self.n_way)
         for i in np.random.permutation(range(self.n_way)):
@@ -66,7 +78,12 @@ class ChexpertDataset(Dataset):
             for j, row in annotations.iterrows():
                 data = self.transforms(Image.open(self.data_path.parent / row['Path'])).repeat(3,1,1)
                 x[j, i] = data
-                y[j, i] = row['Binary Class']
+                abs_class = row['Binary Class']
+                if abs_class not in relative_mapping:
+                    relative_mapping[abs_class] = relative_class_cntr
+                    relative_class_cntr += 1
+                y[j, i] = relative_mapping[abs_class]
+        assert relative_class_cntr == self.n_way, f'{relative_class_cntr} should be {self.n_way}.'
         return x.reshape(-1, 3, self.height, self.width), y.flatten()
 
     def __getitem__(self, task_index: int) -> None:
@@ -88,7 +105,7 @@ def build_dataloader(split):
     bs = 1
     if split == 'train':
         bs = cfg.DATA.BATCH_SIZE
-    dl_labeled = DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 12))
+    dl_labeled = DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 12), shuffle=split=='train')
     return dl_labeled
 
 

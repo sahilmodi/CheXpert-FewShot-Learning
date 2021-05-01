@@ -16,6 +16,7 @@ from utils.misc import set_seed
 from utils.config import _C as cfg
 
 from maml.model.trainer import Trainer
+from maml.model.meta import Meta
 from maml.fewshot_dataloader import build_dataloader
 
 def parse_args():
@@ -50,29 +51,8 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(args.cfg, output_dir / 'config.yaml')
 
-    # config = [
-    #     ('conv2d', [32, 3, 3, 3, 1, 0]),
-    #     ('relu', [True]),
-    #     ('bn', [32]),
-    #     ('max_pool2d', [2, 2, 0]),
-    #     ('conv2d', [32, 32, 3, 3, 1, 0]),
-    #     ('relu', [True]),
-    #     ('bn', [32]),
-    #     ('max_pool2d', [2, 2, 0]),
-    #     ('conv2d', [32, 32, 3, 3, 1, 0]),
-    #     ('relu', [True]),
-    #     ('bn', [32]),
-    #     ('max_pool2d', [2, 2, 0]),
-    #     ('conv2d', [32, 32, 3, 3, 1, 0]),
-    #     ('relu', [True]),
-    #     ('bn', [32]),
-    #     ('max_pool2d', [2, 1, 0]),
-    #     ('flatten', []),
-    #     ('linear', [args.n_way, 32 * 5 * 5])
-    # ]
-
     device = torch.device('cuda')
-    maml = Trainer().to(device)
+    maml = Meta().to(device)
 
     tmp = filter(lambda x: x.requires_grad, maml.parameters())
     num = sum(map(lambda x: np.prod(x.shape), tmp))

@@ -32,8 +32,8 @@ class Trainer(nn.Module):
         self.n_way = C.MAML.N_WAY
         self.k_shot = C.MAML.K_SHOT
         self.k_query = C.MAML.K_QUERY
-        self.task_num = C.MAML.N_TASKS
-        self.num_updates = C.MAML.N_INNER_UPDATES
+        self.num_updates = C.MAML.N_INNER_UPDATES_TRN
+        self.num_updates_test = C.MAML.N_INNER_UPDATES_TST
 
         self.net = Net()
         self.optim = optim.Adam(self.net.parameters(), lr=self.meta_lr)
@@ -49,6 +49,7 @@ class Trainer(nn.Module):
         task_num, setz, c_, h, w = x_support.shape
         querysz = x_query.shape[1]
 
+        self.net.train()
         losses_q = [0 for _ in range(self.num_updates + 1)]  # losses_q[i] is the loss on step i
         corrects = [0 for _ in range(self.num_updates + 1)]
 
@@ -86,7 +87,7 @@ class Trainer(nn.Module):
                 logits = self.net(x_support[i], fast_weights)
                 loss = F.cross_entropy(logits, y_support[i])
                 # 2. compute grad on theta_pi
-                grad = torch.autograd.grad(loss, fast_weights)
+                grad = torch.autograd.grad(loss, [param for _, param in fast_weights])
                 # 3. theta_pi = theta_pi - train_lr * grad
                 fast_weights = list(map(
                     lambda p: (p[1][0], p[1][1] - self.update_lr * p[0]), 
@@ -115,6 +116,11 @@ class Trainer(nn.Module):
         self.optim.step()
 
         accs = np.array(corrects) / (querysz * task_num)
+        # if accs[1] == 1:
+        #     print(loss_q.item())
+        #     print(pred_q)
+        #     print(y_query[-1])
+            # exit()
         return accs
 
 
@@ -133,7 +139,9 @@ class Trainer(nn.Module):
 
         # in order to not ruin the state of running_mean/variance and bn_weight/bias
         # we finetunning on the copied model instead of self.net
-        net = deepcopy(self.net)
+        self.net.eval()
+        net = self.net
+        # net = deepcopy(self.net)
 
         # 1. run the i-th task and compute loss for k=0
         logits = net(x_support)
@@ -144,7 +152,7 @@ class Trainer(nn.Module):
         # this is the loss and accuracy before first update
         with torch.no_grad():
             # [setsz, nway]
-            logits_q = net(x_query, net.named_parameters())
+            logits_q = net(x_query)
             # [setsz]
             pred_q = F.softmax(logits_q, dim=1).argmax(dim=1)
             # scalar
@@ -161,7 +169,7 @@ class Trainer(nn.Module):
             correct = torch.eq(pred_q, y_query).sum().item()
             corrects[1] = corrects[1] + correct
 
-        for k in range(1, self.num_updates):
+        for k in range(1, self.num_updates_test):
             # 1. run the i-th task and compute loss for k=1~K-1
             logits = net(x_support, fast_weights)
             loss = F.cross_entropy(logits, y_support)
@@ -185,6 +193,11 @@ class Trainer(nn.Module):
 
         del net
         accs = np.array(corrects) / querysz
+        # if accs[0] == 0:
+        #     print(loss.item())
+        #     print(pred_q)
+        #     print(y_query)
+            # exit()
         return accs
 
 
