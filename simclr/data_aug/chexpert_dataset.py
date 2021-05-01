@@ -18,7 +18,6 @@ class ChexpertDataset(Dataset):
         self.data_path = Path(csv_path).parent
         self.annotations = pd.read_csv(csv_path).fillna(0)
         self.split = split
-        self.transforms = None
         self.height, self.width = size, size
         self.transforms = ContrastiveLearningViewGenerator(self.get_simclr_pipeline_transform(size), 2)
         self.annotations = self.annotations.sample(frac=1).reset_index(drop=True)[:15000]
@@ -36,6 +35,32 @@ class ChexpertDataset(Dataset):
                                 transforms.ToTensor()
                         ])
         return data_transforms       
+
+    def __len__(self) -> int:
+        return self.annotations.shape[0]
+
+    def __getitem__(self, index: int) -> None:
+        annotation = self.annotations.iloc[index]
+        image = Image.open(self.data_path.parent / annotation['Path']).convert('RGB')
+        classes = annotation[['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']].values.astype("float32")
+        data = self.transforms(image)
+        return data, torch.from_numpy(classes)
+
+
+class ChexpertDatasetFinetune(Dataset):
+    def __init__(self, root_dir: Path, size: str, split="train", num=1000) -> None:
+        super(ChexpertDatasetFinetune, self).__init__()
+        csv_path = Path(root_dir) / f"{split}.csv"
+        self.data_path = Path(csv_path).parent
+        self.annotations = pd.read_csv(csv_path).fillna(0)
+        self.split = split
+        self.transforms = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize((size, size))
+        ])
+        self.height, self.width = size, size
+        if split == 'train':
+            self.annotations = self.annotations.sample(frac=1).reset_index(drop=True)[:num]
 
     def __len__(self) -> int:
         return self.annotations.shape[0]

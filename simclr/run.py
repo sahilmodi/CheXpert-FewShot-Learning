@@ -10,6 +10,8 @@ from simclr.data_aug.contrastive_learning_dataset import ContrastiveLearningData
 from simclr.models.resnet_simclr import ResNetSimCLR
 from simclr.trainer import SimCLR
 
+from utils.misc import set_seed
+
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith("__")
                      and callable(models.__dict__[name]))
@@ -60,6 +62,7 @@ def main():
     args = parser.parse_args()
     assert args.n_views == 2, "Only two view training is supported. Please use --n-views 2."
     # check if gpu training is available
+    set_seed(args.seed)
     if not args.disable_cuda and torch.cuda.is_available():
         args.device = torch.device('cuda')
         cudnn.deterministic = True
