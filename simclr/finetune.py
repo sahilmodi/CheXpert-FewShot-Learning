@@ -18,7 +18,7 @@ from torchvision import datasets
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
-
+import torch.nn as nn
 
 from utils.misc import set_seed
 from simclr.data_aug.chexpert_dataset import ChexpertDatasetFinetune
@@ -83,6 +83,8 @@ def parse_args():
     ap.add_argument('-g', "--gpu", type=int, help="Which gpu to use.")
     ap.add_argument('-tds', "--training_size", type=int, default=1000, help="How much training data to use.")
     ap.add_argument('-s', "--seed", type=int, default=0, help="Set random seed.")
+    ap.add_argument('-m', "--mixup", type=bool, default=False, help="Use mixup training.")
+    ap.add_argument('-c', "--beta_c", type=float, default=0.0, help="Use confidence tampering.")
     return ap.parse_args()
 
 
@@ -108,6 +110,13 @@ if __name__ == '__main__':
     elif config['arch'] == 'resnet50':
         model = torchvision.models.resnet50(pretrained=False, num_classes=5).to(device)
 
+    # mixup parameters
+    if args.training_size == 1000:
+        mixup_alpha = 0.6 
+    elif args.training_size == 12500:
+        mixup_alpha = 0.3 
+    elif args.training_size == 20000:
+        mixup_alpha = 0.2
 
     checkpoint = torch.load(args.dir / 'checkpoint_0200.pth.tar', map_location=device)
     state_dict = checkpoint['state_dict']
@@ -155,6 +164,33 @@ if __name__ == '__main__':
             auc_ += auc
             prc_ += prc
             # top1_train_accuracy += top1[0]
+
+            if args.mixup:
+                x_bar = x_batch 
+                labels_ = y_batch 
+
+                # generate mixup parameter
+                lambda_ = np.random.beta(mixup_alpha, mixup_alpha)
+
+                inds1 = torch.arange(x_bar.shape[0])
+                inds2 = torch.randperm(x_bar.shape[0])
+
+                x_tilde = lambda_ * x_bar[inds1] + (1. - lambda_) * x_bar[inds2]
+
+                # forward pass
+                y_bar = model(x_tilde)
+                
+                loss_fn = nn.BCEWithLogitsLoss() 
+                loss_mixup = lambda_ * loss_fn(y_bar, labels_[inds1]) + (1. - lambda_) * loss_fn(y_bar, labels_[inds2])
+                loss_mixup = loss_mixup.sum()
+                
+                loss = loss + loss_mixup
+            
+            if args.beta_c:
+                y_ = torch.sigmoid(logits)
+                pcs = torch.mean(y_, axis=0)
+                rct = torch.log((0.35 / pcs) + (pcs / 0.75))
+                loss += args.beta_c * torch.sum(rct)
 
             optimizer.zero_grad()
             loss.backward()
