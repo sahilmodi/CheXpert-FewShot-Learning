@@ -82,6 +82,7 @@ def parse_args():
     ap.add_argument('-d', "--dir", type=Path, help="Path to model directory.")
     ap.add_argument('-g', "--gpu", type=int, help="Which gpu to use.")
     ap.add_argument('-tds', "--training_size", type=int, default=1000, help="How much training data to use.")
+    ap.add_argument('-s', "--seed", type=int, default=0, help="Set random seed.")
     return ap.parse_args()
 
 
@@ -90,7 +91,7 @@ if __name__ == '__main__':
     args = parse_args()
     with open(os.path.join(args.dir / 'config.yml')) as file:
         config = yaml.load(file)
-    set_seed(config['seed'])
+    set_seed(args.seed)
 
     # check if gpu training is available
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -181,5 +182,5 @@ if __name__ == '__main__':
         # top5_accuracy /= (counter + 1)
         auc_val /= (counter + 1)
         prc_val /= (counter + 1)
-        print(f"Epoch {epoch}\tAUC {auc_.item()}\tPRC: {prc_.item()}\tAUC_val: {auc_val.item()}\tPRC_val: {prc_val.item()}")
+        print(f"Epoch {epoch}\tAUC {auc_.item():.5f}\tPRC: {prc_.item():.5f}\tAUC_val: {auc_val.item():.5f}\tPRC_val: {prc_val.item():.5f}")
     torch.save(model.state_dict(), args.dir / f"checkpoint_ft_{int(auc_val.item()*10000):04d}.pth.tar")
