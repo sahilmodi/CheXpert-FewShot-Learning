@@ -145,7 +145,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008)
     criterion = torch.nn.BCEWithLogitsLoss().to(device)
 
-    best_auc, best_epoch = 0, 0
+    best_auc, best_epoch, best_prc = 0, 0, 0
     for epoch in range(args.epochs):
         model.train()
         auc_, prc_ = 0, 0
@@ -219,6 +219,7 @@ if __name__ == '__main__':
         print(f"Epoch {epoch}\tAUC {auc_.item():.5f}\tPRC: {prc_.item():.5f}\tAUC_val: {auc_val.item():.5f}\tPRC_val: {prc_val.item():.5f}")
         if auc_val > best_auc:
             best_auc = auc_val.item()
+            best_prc = prc_val.item()
             best_epoch = epoch
             torch.save(model.state_dict(), output_dir / f"model_best.pth.tar")
 
@@ -241,7 +242,7 @@ if __name__ == '__main__':
     
     auc_tst /= (counter + 1)
     prc_tst /= (counter + 1)
-    val_results_best = f"[VAL]: AUC_val: {best_auc:.5f}\tEpoch: {best_epoch}"
+    val_results_best = f"[VAL]: Epoch: {best_epoch}\tAUC_val: {best_auc:.5f}\tPRC_val: {best_prc:.5f}\t"
     tst_results = f"[TEST]: AUC_tst: {auc_tst.item():.5f}\tPRC_tst: {prc_tst.item():.5f}"
     print(val_results_best)
     print(tst_results)
