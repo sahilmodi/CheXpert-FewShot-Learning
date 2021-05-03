@@ -1,16 +1,12 @@
-import sys
+import os, sys
 from pathlib import Path
-
-from torch._C import autocast_decrement_nesting
 sys.path.append(str(Path(__file__).absolute().parent.parent))
-
-import numpy as np
-import os
 import yaml
+import copy
 import argparse
-import matplotlib.pyplot as plt
-import sklearn.metrics as metrics
 import warnings
+import numpy as np
+import sklearn.metrics as metrics
 
 import torch
 import torchvision
@@ -23,26 +19,16 @@ import torch.nn as nn
 from utils.misc import set_seed
 from simclr.data_aug.chexpert_dataset import ChexpertDatasetFinetune
 
-def get_stl10_data_loaders(download, shuffle=False, batch_size=256):
-    train_dataset = datasets.STL10('./data', split='train', download=download, transform=transforms.ToTensor())
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.STL10('./data', split='test', download=download, transform=transforms.ToTensor())
-    test_loader = DataLoader(test_dataset, batch_size=2*batch_size, num_workers=10, drop_last=False, shuffle=shuffle)
-    return train_loader, test_loader
-
-def get_cifar10_data_loaders(download, shuffle=False, batch_size=256):
-    train_dataset = datasets.CIFAR10('./data', train=True, download=download, transform=transforms.ToTensor())
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=0, drop_last=False, shuffle=shuffle)
-    test_dataset = datasets.CIFAR10('./data', train=False, download=download, transform=transforms.ToTensor())
-    test_loader = DataLoader(test_dataset, batch_size=2*batch_size, num_workers=10, drop_last=False, shuffle=shuffle)
-    return train_loader, test_loader
-
 def get_chexpert_data_loaders(config, training_data_size):
     train_dataset = ChexpertDatasetFinetune(config['data'], 224, num=training_data_size)
     train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], num_workers=12, drop_last=False, shuffle=True)
+    
+    val_dataset = ChexpertDatasetFinetune(config['data'], 224, split='valid')
+    val_loader = DataLoader(train_dataset, batch_size=config['batch_size'], num_workers=12, drop_last=False)
+    
     test_dataset = ChexpertDatasetFinetune(config['data'], 224, split="test")
     test_loader = DataLoader(test_dataset, batch_size=2*config['batch_size'], num_workers=12, drop_last=False)
-    return train_loader, test_loader
+    return train_loader, val_loader, test_loader
 
 def get_auc(labels, y):
         try:
@@ -80,11 +66,13 @@ def accuracy(output, target):
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument('-d', "--dir", type=Path, help="Path to model directory.")
+    ap.add_argument('-e', "--epochs", type=int, default=200, help="Number of epochs to finetune.")
     ap.add_argument('-g', "--gpu", type=int, help="Which gpu to use.")
     ap.add_argument('-tds', "--training_size", type=int, default=1000, help="How much training data to use.")
     ap.add_argument('-s', "--seed", type=int, default=0, help="Set random seed.")
-    ap.add_argument('-m', "--mixup", type=bool, default=False, help="Use mixup training.")
+    ap.add_argument('-m', "--mixup", action='store_true', help="Use mixup training.")
     ap.add_argument('-c', "--beta_c", type=float, default=0.0, help="Use confidence tampering.")
+    ap.add_argument('-st', "--self_training", type=str, help="Path to teacher model for model distillation.")
     return ap.parse_args()
 
 
@@ -92,7 +80,7 @@ if __name__ == '__main__':
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     args = parse_args()
     with open(os.path.join(args.dir / 'config.yml')) as file:
-        config = yaml.load(file)
+        config = yaml.safe_load(file)
     set_seed(args.seed)
 
     # check if gpu training is available
@@ -131,39 +119,45 @@ if __name__ == '__main__':
     log = model.load_state_dict(state_dict, strict=False)
     assert log.missing_keys == ['fc.weight', 'fc.bias']
 
-    if config['dataset_name'] == 'cifar10':
-        train_loader, test_loader = get_cifar10_data_loaders(download=True)
-    elif config['dataset_name'] == 'stl10':
-        train_loader, test_loader = get_stl10_data_loaders(download=True)
-    elif config['dataset_name'] == 'chexpert':
-        train_loader, test_loader = get_chexpert_data_loaders(config, args.training_size)
+    if config['dataset_name'] == 'chexpert':
+        train_loader, val_loader, test_loader = get_chexpert_data_loaders(config, args.training_size)
     print("Dataset:", config['dataset_name'])
 
     # freeze all layers but the last fc
-    for name, param in model.named_parameters():
-        if name not in ['fc.weight', 'fc.bias']:
-            param.requires_grad = False
-
-    parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
-    assert len(parameters) == 2  # fc.weight, fc.bias
+    if args.self_training:
+        teacher_state_dict = torch.load(args.self_training)
+        teacher_model = copy.deepcopy(model)
+        teacher_model.load_state_dict(teacher_state_dict)
+        teacher_model.eval()
+    else:
+        for name, param in model.named_parameters():
+            if name not in ['fc.weight', 'fc.bias']:
+                param.requires_grad = False
+        parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
+        assert len(parameters) == 2  # fc.weight, fc.bias
 
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008)
     criterion = torch.nn.BCEWithLogitsLoss().to(device)
 
-    epochs = 200
-    for epoch in range(epochs):
-        # top1_train_accuracy = 0
+    for epoch in range(args.epochs):
         auc_, prc_ = 0, 0
         for counter, (x_batch, y_batch) in enumerate(train_loader):
             x_batch = x_batch.to(device)
             y_batch = y_batch.to(device)
 
+            if args.self_training:
+                y_batch_t = torch.sigmoid(teacher_model(x_batch))
+                # y_batch_t = 0.5*y_batch + 0.5*torch.sigmoid(1e8 * (y_batch_t - 0.5))
+
+            # print(y_batch_t[0])
+            # print(y_batch[0])
+            # exit()
+
             logits = model(x_batch)
-            loss = criterion(logits, y_batch)
+            loss = criterion(logits, y_batch if not args.self_training else y_batch_t)
             auc, prc = accuracy(logits, y_batch)
             auc_ += auc
             prc_ += prc
-            # top1_train_accuracy += top1[0]
 
             if args.mixup:
                 x_bar = x_batch 
@@ -196,27 +190,50 @@ if __name__ == '__main__':
             loss.backward()
             optimizer.step()
 
-        # top1_train_accuracy /= (counter + 1)
         auc_ /= (counter + 1)
         prc_ /= (counter + 1)
-        # top1_accuracy = 0
-        # top5_accuracy = 0
+        
+        # Validate
         auc_val, prc_val = 0, 0
-        for counter, (x_batch, y_batch) in enumerate(test_loader):
+        for counter, (x_batch, y_batch) in enumerate(val_loader):
             x_batch = x_batch.to(device)
             y_batch = y_batch.to(device)
 
             logits = model(x_batch)
         
             auc, prc = accuracy(logits, y_batch)
-            # top1_accuracy += top1[0]
-            # top5_accuracy += top5[0]
             auc_val += auc 
             prc_val += prc
         
-        # top1_accuracy /= (counter + 1)
-        # top5_accuracy /= (counter + 1)
         auc_val /= (counter + 1)
         prc_val /= (counter + 1)
         print(f"Epoch {epoch}\tAUC {auc_.item():.5f}\tPRC: {prc_.item():.5f}\tAUC_val: {auc_val.item():.5f}\tPRC_val: {prc_val.item():.5f}")
-    torch.save(model.state_dict(), args.dir / f"checkpoint_ft_{int(auc_val.item()*10000):04d}.pth.tar")
+
+    # Validate
+    auc_tst, prc_tst = 0, 0
+    for counter, (x_batch, y_batch) in enumerate(test_loader):
+        x_batch = x_batch.to(device)
+        y_batch = y_batch.to(device)
+
+        logits = model(x_batch)
+    
+        auc, prc = accuracy(logits, y_batch)
+        auc_tst += auc 
+        prc_tst += prc
+    
+    auc_tst /= (counter + 1)
+    prc_tst /= (counter + 1)
+    results = f"[TEST]: AUC_tst: {auc_tst.item():.5f}\tPRC_tst: {prc_tst.item():.5f}"
+    print(results)
+
+    # Save checkpoint at the end
+    fn =  f"checkpoint_ft_{int(auc_val.item()*10000):04d}"
+    with open(args.dir / f"{fn}.yml", 'w') as f:
+        cfg = {}
+        for k, v in args.__dict__.items():
+            if not isinstance(v, (int, str, bool, float)):
+                v = str(v)
+            cfg[k] = v
+        cfg["last_epoch_message"] = results
+        yaml.dump(cfg, f, default_flow_style=False)
+    torch.save(model.state_dict(), args.dir / f"{fn}.pth.tar")
