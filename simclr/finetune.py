@@ -66,12 +66,13 @@ def accuracy(output, target):
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument('-d', "--dir", type=Path, help="Path to model directory.")
+    ap.add_argument("-n", "--name", type=str, required=True, help="Name of the run.")
     ap.add_argument('-e', "--epochs", type=int, default=200, help="Number of epochs to finetune.")
     ap.add_argument('-g', "--gpu", type=int, help="Which gpu to use.")
     ap.add_argument('-tds', "--training_size", type=int, default=1000, help="How much training data to use.")
     ap.add_argument('-s', "--seed", type=int, default=0, help="Set random seed.")
     ap.add_argument('-m', "--mixup", action='store_true', help="Use mixup training.")
-    ap.add_argument('-c', "--beta_c", type=float, default=0.0, help="Use confidence tampering.")
+    ap.add_argument('-c', "--confidence_tempering", action='store_true', help="Use confidence tampering.")
     ap.add_argument('-st', "--self_training", type=str, help="Path to teacher model for model distillation.")
     return ap.parse_args()
 
@@ -82,6 +83,8 @@ if __name__ == '__main__':
     with open(os.path.join(args.dir / 'config.yml')) as file:
         config = yaml.safe_load(file)
     set_seed(args.seed)
+    output_dir = args.dir / args.name
+    output_dir.mkdir(exist_ok=True)
 
     # check if gpu training is available
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -91,7 +94,7 @@ if __name__ == '__main__':
         cudnn.deterministic = True
         cudnn.benchmark = True
 
-    print("Using device:", device)
+    print("Using device:", torch.cuda.get_device_name())
 
     if config['arch'] == 'resnet18':
         model = torchvision.models.resnet18(pretrained=False, num_classes=5).to(device)
@@ -100,11 +103,14 @@ if __name__ == '__main__':
 
     # mixup parameters
     if args.training_size == 1000:
-        mixup_alpha = 0.6 
+        mixup_alpha = 0.6
+        beta_c = 0.2
     elif args.training_size == 12500:
-        mixup_alpha = 0.3 
+        mixup_alpha = 0.3
+        beta_c = 0.2
     elif args.training_size == 20000:
         mixup_alpha = 0.2
+        beta_c = 0.1
 
     checkpoint = torch.load(args.dir / 'checkpoint_0200.pth.tar', map_location=device)
     state_dict = checkpoint['state_dict']
@@ -140,7 +146,8 @@ if __name__ == '__main__':
     criterion = torch.nn.BCEWithLogitsLoss().to(device)
 
     for epoch in range(args.epochs):
-        auc_, prc_ = 0, 0
+        model.train()
+        auc_, prc_, best_auc = 0, 0, 0
         for counter, (x_batch, y_batch) in enumerate(train_loader):
             x_batch = x_batch.to(device)
             y_batch = y_batch.to(device)
@@ -180,7 +187,7 @@ if __name__ == '__main__':
                 
                 loss = loss + loss_mixup
             
-            if args.beta_c:
+            if args.confidence_tempering:
                 y_ = torch.sigmoid(logits)
                 pcs = torch.mean(y_, axis=0)
                 rct = torch.log((0.35 / pcs) + (pcs / 0.75))
@@ -194,6 +201,7 @@ if __name__ == '__main__':
         prc_ /= (counter + 1)
         
         # Validate
+        model.eval()
         auc_val, prc_val = 0, 0
         for counter, (x_batch, y_batch) in enumerate(val_loader):
             x_batch = x_batch.to(device)
@@ -204,12 +212,20 @@ if __name__ == '__main__':
             auc, prc = accuracy(logits, y_batch)
             auc_val += auc 
             prc_val += prc
+
+        
         
         auc_val /= (counter + 1)
         prc_val /= (counter + 1)
         print(f"Epoch {epoch}\tAUC {auc_.item():.5f}\tPRC: {prc_.item():.5f}\tAUC_val: {auc_val.item():.5f}\tPRC_val: {prc_val.item():.5f}")
+        if auc_val > best_auc:
+            best_auc = auc_val
+            torch.save(model.state_dict(), output_dir / f"model_best.pth.tar")
 
-    # Validate
+
+    # Test
+    model.load_state_dict(torch.load(output_dir / "model_best.pth.tar"))
+    model.eval()
     auc_tst, prc_tst = 0, 0
     for counter, (x_batch, y_batch) in enumerate(test_loader):
         x_batch = x_batch.to(device)
@@ -227,8 +243,7 @@ if __name__ == '__main__':
     print(results)
 
     # Save checkpoint at the end
-    fn =  f"checkpoint_ft_{int(auc_val.item()*10000):04d}"
-    with open(args.dir / f"{fn}.yml", 'w') as f:
+    with open(output_dir / f"finetuning.yml", 'w') as f:
         cfg = {}
         for k, v in args.__dict__.items():
             if not isinstance(v, (int, str, bool, float)):
@@ -236,4 +251,3 @@ if __name__ == '__main__':
             cfg[k] = v
         cfg["last_epoch_message"] = results
         yaml.dump(cfg, f, default_flow_style=False)
-    torch.save(model.state_dict(), args.dir / f"{fn}.pth.tar")
