@@ -145,9 +145,10 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008)
     criterion = torch.nn.BCEWithLogitsLoss().to(device)
 
+    best_auc, best_epoch = 0, 0
     for epoch in range(args.epochs):
         model.train()
-        auc_, prc_, best_auc = 0, 0, 0
+        auc_, prc_ = 0, 0
         for counter, (x_batch, y_batch) in enumerate(train_loader):
             x_batch = x_batch.to(device)
             y_batch = y_batch.to(device)
@@ -213,18 +214,19 @@ if __name__ == '__main__':
             auc_val += auc 
             prc_val += prc
 
-        
-        
         auc_val /= (counter + 1)
         prc_val /= (counter + 1)
         print(f"Epoch {epoch}\tAUC {auc_.item():.5f}\tPRC: {prc_.item():.5f}\tAUC_val: {auc_val.item():.5f}\tPRC_val: {prc_val.item():.5f}")
         if auc_val > best_auc:
             best_auc = auc_val
+            best_epoch = epoch
             torch.save(model.state_dict(), output_dir / f"model_best.pth.tar")
 
 
     # Test
     model.load_state_dict(torch.load(output_dir / "model_best.pth.tar"))
+    print(f"- Loaded model from epoch {best_epoch}")
+    args.best_epoch = best_epoch
     model.eval()
     auc_tst, prc_tst = 0, 0
     for counter, (x_batch, y_batch) in enumerate(test_loader):
@@ -249,5 +251,5 @@ if __name__ == '__main__':
             if not isinstance(v, (int, str, bool, float)):
                 v = str(v)
             cfg[k] = v
-        cfg["last_epoch_message"] = results
+        cfg["Test Results"] = results
         yaml.dump(cfg, f, default_flow_style=False)
