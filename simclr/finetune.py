@@ -218,15 +218,15 @@ if __name__ == '__main__':
         prc_val /= (counter + 1)
         print(f"Epoch {epoch}\tAUC {auc_.item():.5f}\tPRC: {prc_.item():.5f}\tAUC_val: {auc_val.item():.5f}\tPRC_val: {prc_val.item():.5f}")
         if auc_val > best_auc:
-            best_auc = auc_val
+            best_auc = auc_val.item()
             best_epoch = epoch
             torch.save(model.state_dict(), output_dir / f"model_best.pth.tar")
 
 
     # Test
     model.load_state_dict(torch.load(output_dir / "model_best.pth.tar"))
+    print()
     print(f"- Loaded model from epoch {best_epoch}")
-    args.best_epoch = best_epoch
     model.eval()
     auc_tst, prc_tst = 0, 0
     for counter, (x_batch, y_batch) in enumerate(test_loader):
@@ -241,8 +241,10 @@ if __name__ == '__main__':
     
     auc_tst /= (counter + 1)
     prc_tst /= (counter + 1)
-    results = f"[TEST]: AUC_tst: {auc_tst.item():.5f}\tPRC_tst: {prc_tst.item():.5f}"
-    print(results)
+    val_results_best = f"[VAL]: AUC_val: {best_auc:.5f}\tEpoch: {best_epoch}"
+    tst_results = f"[TEST]: AUC_tst: {auc_tst.item():.5f}\tPRC_tst: {prc_tst.item():.5f}"
+    print(val_results_best)
+    print(tst_results)
 
     # Save checkpoint at the end
     with open(output_dir / f"finetuning.yml", 'w') as f:
@@ -251,5 +253,6 @@ if __name__ == '__main__':
             if not isinstance(v, (int, str, bool, float)):
                 v = str(v)
             cfg[k] = v
-        cfg["Test Results"] = results
+        cfg["Test Results"] = tst_results
+        cfg["Best Val Results"] = val_results_best
         yaml.dump(cfg, f, default_flow_style=False)
