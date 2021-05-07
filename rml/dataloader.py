@@ -46,28 +46,20 @@ class ChexpertDatasetUnlabeled(Dataset):
         self.data_path = Path(csv_path).parent
         labeled_size = cfg.DATA.LABELED_SIZE
         unlabeled_size = cfg.DATA.UNLABELED_SIZE
-        self.labeled = shuffled_annotations[:cfg.DATA.LABELED_SIZE]
+        self.labeled = shuffled_annotations[:labeled_size]
         self.annotations = shuffled_annotations[labeled_size:labeled_size + unlabeled_size].reset_index(drop=True)
         self.S = []
         self.height, self.width = 224, 224
         self.transforms = get_transforms(self.height, self.width, 'train')
 
-        model = model.cuda() 
+        # model = model.cuda() 
         self.assign_nearest(model)
     
     def assign_nearest(self, fe):
-        unlabeled_ftrs, labeled_ftrs = [], []
-        for i in range(len(self.annotations)):
-            im = Image.open(self.data_path.parent / self.annotations.iloc[i]["Path"])
-            im = self.transforms(im).repeat(3, 1, 1)
-            im = im.cuda()
-            unlabeled_ftrs.append(fe.extract_feature(im))
-
-        for i in range(len(self.labeled)):
-            im = Image.open(self.data_path.parent / self.labeled.iloc[i]["Path"])
-            im = self.transforms(im).repeat(3, 1, 1)
-            im = im.cuda()
-            labeled_ftrs.append(fe.extract_feature(im))
+        unlabeled_paths, labeled_paths = list(self.annotations["Path"]), list(self.labeled["Path"])
+        ftr_extractor = np.vectorize(lambda path: fe.extract_feature(self.transforms(Image.open(self.data_path.parent / path)).repeat(3, 1, 1)))
+        unlabeled_ftrs = ftr_extractor(unlabeled_paths)
+        labeled_ftrs = ftr_extractor(labeled_paths)
             
         for i, unlabel in enumerate(unlabeled_ftrs):
             dist = torch.norm(labeled_ftrs - unlabel, dim=1, p=None)
