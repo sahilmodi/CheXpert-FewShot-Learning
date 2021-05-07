@@ -227,7 +227,7 @@ class SemiSupervisedImbalanceChexpert(Dataset):
             np.random.shuffle(idx)
             selec_idx = idx[:the_img_num]
             new_data.append(self.unlabeled_annotations.iloc[selec_idx])
-            new_data[-1]["Label"].replace(aux_targets[selec_idx], inplace=True)
+            new_data[-1].loc[:, "Label"] = aux_targets[selec_idx]
             for pseudo_class in aux_targets[selec_idx]:
                 self.num_per_cls_dict[pseudo_class] += 1
         self.annotations = pd.concat(new_data)

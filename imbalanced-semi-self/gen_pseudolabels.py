@@ -52,9 +52,13 @@ parser.add_argument('--data_dir', default='./data', type=str,
 parser.add_argument('--data_filename', default='ti_80M_selected.pickle', type=str)
 parser.add_argument('--output_dir', default='./data', type=str)
 parser.add_argument('--output_filename', default='pseudo_labeled_chexpert.pickle', type=str)
+parser.add_argument('--config', type=str, default='./config/longtail_base.yaml')
 
 
 args = parser.parse_args()
+
+cfg.merge_from_file(args.config)
+cfg.freeze()
 
 logging.basicConfig(
     level=logging.INFO,

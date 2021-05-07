@@ -23,6 +23,18 @@ from dataset.imbalance_chexpert import SemiSupervisedImbalanceChexpert, Chexpert
 from losses import LDAMLoss, FocalLoss
 from utils.long_tail_config import _C as cfg
 
+def set_seed(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    np.random.seed(seed)
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
+
+set_seed(543)
 
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith("__")
@@ -57,13 +69,19 @@ parser.add_argument('--seed', default=None, type=int, help='seed for initializin
 parser.add_argument('--root_log', type=str, default='log')
 parser.add_argument('--root_model', type=str, default='./checkpoint')
 parser.add_argument('--pseudo_label', type=str, default='./data/pseudo_labeled_chexpert_1000.pickle')
+parser.add_argument('--config', type=str, default='/home/koyejolab/CheXpert-FewShort-Learning/config/longtail_base.yaml')
+
 best_acc1 = 0
 
 
 def main():
     args = parser.parse_args()
+    cfg.merge_from_file(args.config)
+    cfg.freeze()
+
     args.store_name = '_'.join([args.dataset, args.arch, args.loss_type, args.train_rule, args.imb_type,
-                                str(args.imb_factor), str(args.imb_factor_unlabel), args.exp_str])
+                                str(args.imb_factor), str(args.imb_factor_unlabel), args.exp_str, str(cfg.DATA.LABELED_SIZE)])
+
     prepare_folders(args)
     if args.seed is not None:
         random.seed(args.seed)
