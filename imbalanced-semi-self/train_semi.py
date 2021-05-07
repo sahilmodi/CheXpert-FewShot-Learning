@@ -56,6 +56,7 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', he
 parser.add_argument('--seed', default=None, type=int, help='seed for initializing training.')
 parser.add_argument('--root_log', type=str, default='log')
 parser.add_argument('--root_model', type=str, default='./checkpoint')
+parser.add_argument('--pseudo_label', type=str, default='./data/pseudo_labeled_chexpert_1000.pickle')
 best_acc1 = 0
 
 
@@ -153,7 +154,7 @@ def main_worker(gpu, args):
         bs = cfg.DATA.BATCH_SIZE
         train_dataset = SemiSupervisedImbalanceChexpert(
             ds_path / "train.csv", 
-            "./data/pseudo_labeled_chexpert_1000.pickle",
+            args.pseudo_label,
             split="train",
             imb_type=args.imb_type, 
             imb_factor=args.imb_factor, 
