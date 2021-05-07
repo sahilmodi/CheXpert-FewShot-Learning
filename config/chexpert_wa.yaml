@@ -3,9 +3,8 @@ OUTPUT_ROOT_DIR: './outputs'
 DATA:
   PATH: '/home/smodi9/CheXpert-v1.0-small/'
   BATCH_SIZE: 100
-  LABELED_SIZE: 100_000
+  LABELED_SIZE: 1_000
   UNLABELED_SIZE: 15_000
-  WEAK_AUG: False
 
 SOLVER:
   BASE_LR: 1.0e-4
