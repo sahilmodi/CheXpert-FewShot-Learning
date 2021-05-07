@@ -73,7 +73,8 @@ def parse_args():
     ap.add_argument('-s', "--seed", type=int, default=0, help="Set random seed.")
     ap.add_argument('-m', "--mixup", action='store_true', help="Use mixup training.")
     ap.add_argument('-c', "--confidence_tempering", action='store_true', help="Use confidence tampering.")
-    ap.add_argument('-st', "--self_training", type=str, help="Path to teacher model for model distillation.")
+    ap.add_argument('-st', "--self_training", action='store_true', help="Enable self training.")
+    ap.add_argument('-ta', "--train_all", action='store_true', help="Whether or not to train whole network.")
     return ap.parse_args()
 
 
@@ -131,16 +132,18 @@ if __name__ == '__main__':
 
     # freeze all layers but the last fc
     if args.self_training:
-        teacher_state_dict = torch.load(args.self_training)
+        teacher_state_dict = torch.load(args.dir / f'tds{args.training_size}' / "teacher.pth.tar")
         teacher_model = copy.deepcopy(model)
         teacher_model.load_state_dict(teacher_state_dict)
         teacher_model.eval()
-    else:
+    
+    if not args.train_all:
         for name, param in model.named_parameters():
             if name not in ['fc.weight', 'fc.bias']:
                 param.requires_grad = False
         parameters = list(filter(lambda p: p.requires_grad, model.parameters()))
         assert len(parameters) == 2  # fc.weight, fc.bias
+        print("- Froze ResNet.")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=0.0008)
     criterion = torch.nn.BCEWithLogitsLoss().to(device)
@@ -156,10 +159,6 @@ if __name__ == '__main__':
             if args.self_training:
                 y_batch_t = torch.sigmoid(teacher_model(x_batch))
                 # y_batch_t = 0.5*y_batch + 0.5*torch.sigmoid(1e8 * (y_batch_t - 0.5))
-
-            # print(y_batch_t[0])
-            # print(y_batch[0])
-            # exit()
 
             logits = model(x_batch)
             loss = criterion(logits, y_batch if not args.self_training else y_batch_t)
@@ -192,7 +191,7 @@ if __name__ == '__main__':
                 y_ = torch.sigmoid(logits)
                 pcs = torch.mean(y_, axis=0)
                 rct = torch.log((0.35 / pcs) + (pcs / 0.75))
-                loss += args.beta_c * torch.sum(rct)
+                loss += beta_c * torch.sum(rct)
 
             optimizer.zero_grad()
             loss.backward()
@@ -208,7 +207,8 @@ if __name__ == '__main__':
             x_batch = x_batch.to(device)
             y_batch = y_batch.to(device)
 
-            logits = model(x_batch)
+            with torch.no_grad():
+                logits = model(x_batch)
         
             auc, prc = accuracy(logits, y_batch)
             auc_val += auc 
@@ -234,7 +234,8 @@ if __name__ == '__main__':
         x_batch = x_batch.to(device)
         y_batch = y_batch.to(device)
 
-        logits = model(x_batch)
+        with torch.no_grad():
+            logits = model(x_batch)
     
         auc, prc = accuracy(logits, y_batch)
         auc_tst += auc 
