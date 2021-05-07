@@ -65,6 +65,9 @@ class ChexpertDatasetUnlabeled(Dataset):
             dist = torch.norm(labeled_ftrs - unlabel, dim=1, p=None)
             nearest_idx = torch.argmin(dist, axis=0)
             nearest = labeled_ftrs[nearest_idx]
+            print(type(nearest), type(unlabel))
+            print(nearest)
+            print(unlabel)
             s_i = np.exp(F.normalize(torch.norm(nearest - unlabel, dim=1, p=None)))
             self.S.append(nearest)
             print(self.annotations.iloc[i][['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']])
