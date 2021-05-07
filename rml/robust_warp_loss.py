@@ -28,11 +28,6 @@ class RobustWarpLoss(nn.Module):
                 s_i = 1
             else:
                 s_i = S[i - self.l]
-            #     unlabel = target[i, :]
-            #     labeled = target[:self.l+1, :]
-            #     dist = torch.norm(labeled - unlabel, dim=1, p=None)
-            #     nearest = dist.topk(1, largest=False)
-            #     s_i = np.exp(F.normalize(torch.norm(nearest - unlabel, dim=1, p=None)))
             for j in range(num_labels):
                 if target[i, j] == 1:
                     neg_labels_idx = np.array([idx for idx, v in enumerate(target[i, :]) if v == 0])

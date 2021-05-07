@@ -1,5 +1,5 @@
 DATA:
-  PATH: '/home/smodi9/CheXpert-v1.0-small/'
+  PATH: '/home/koyejolab/CheXpert/CheXpert-v1.0-small/'
   BATCH_SIZE: 96
   LABELED_SIZE: 1_000
   UNLABELED_SIZE: 15_000

@@ -4,7 +4,7 @@ from utils.config import _C as cfg
 def get_transforms(height, width, split):
     transform = transforms.Compose([
         transforms.Resize((height, width)),
-        transforms.Lambda(lambda x: transforms.functional.equalize(x)),
+        # transforms.Lambda(lambda x: transforms.functional.equalize(x)),
         transforms.ToTensor(),
         transforms.Normalize(0.5, 0.5),
     ])
@@ -14,11 +14,11 @@ def get_transforms(height, width, split):
     if split == 'train':
         transform = transforms.Compose([
             transform,
-            transforms.RandomAffine(
-                degrees=(-15, 15),
-                translate=(0.05, 0.05),
-                scale=(0.95, 1.05)
-            ),
+            # transforms.RandomAffine(
+            #     degrees=(-15, 15),
+            #     translate=(0.05, 0.05),
+            #     scale=(0.95, 1.05)
+            # ),
         ])
     return transform
 

@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import PIL.Image as Image
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
+from tqdm import tqdm
 
 from utils.config import _C as cfg
 from utils.transforms import get_transforms
@@ -51,34 +52,39 @@ class ChexpertDatasetUnlabeled(Dataset):
         self.S = []
         self.height, self.width = 224, 224
         self.transforms = get_transforms(self.height, self.width, 'train')
+        self.model = model
 
-        # model = model.cuda() 
-        self.assign_nearest(model)
+        self.assign_nearest()
     
-    def assign_nearest(self, fe):
-        unlabeled_paths, labeled_paths = list(self.annotations["Path"]), list(self.labeled["Path"])
-        ftr_extractor = np.vectorize(lambda path: fe.extract_feature(self.transforms(Image.open(self.data_path.parent / path)).repeat(3, 1, 1)))
-        unlabeled_ftrs = ftr_extractor(unlabeled_paths)
-        labeled_ftrs = ftr_extractor(labeled_paths)
+    def assign_nearest(self):
+        self.S.clear() # clear when called again
+
+        unlabeled_paths, labeled_paths = list(self.annotations["Path"])[:5], list(self.labeled["Path"])[:5]
+        def ftr_extractor(path):
+            im = Image.open(self.data_path.parent / path)
+            im = self.transforms(im).repeat(3, 1, 1)
+            ftr = self.model.extract_feature(im)
+            return ftr
+
+        unlabeled_ftrs, labeled_ftrs = [], []
+        for i, path in enumerate(tqdm(unlabeled_paths, desc="Extracting features for unlabeled images")):
+            unlabeled_ftrs.append(ftr_extractor(path))
+        for i, path in enumerate(tqdm(labeled_paths, desc="Extracting features for labeled images")):
+            labeled_ftrs.append(ftr_extractor(path))
+
+        for i, unlabel in enumerate(tqdm(unlabeled_ftrs)):
+            dist = torch.linalg.norm(torch.cat(labeled_ftrs).flatten(1) - unlabel.flatten(1), dim=1, ord=None)
+            nearest_idx = torch.argmin(dist)
+            nearest = labeled_ftrs[nearest_idx.item()]
+            s_i = np.exp(torch.linalg.norm(nearest.flatten(1) - unlabel.flatten(1), dim=1, ord=None))
+            self.S.append(nearest)       
             
-        for i, unlabel in enumerate(unlabeled_ftrs):
-            dist = torch.norm(labeled_ftrs - unlabel, dim=1, p=None)
-            nearest_idx = torch.argmin(dist, axis=0)
-            nearest = labeled_ftrs[nearest_idx]
-            print(type(nearest), type(unlabel))
-            print(nearest)
-            print(unlabel)
-            s_i = np.exp(F.normalize(torch.norm(nearest - unlabel, dim=1, p=None)))
-            self.S.append(nearest)
-            print(self.annotations.iloc[i][['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']])
-            print(self.labeled.iloc[nearest_idx][['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']])
-            self.annotations.iloc[i]["Atelectasis"] = self.labeled.iloc[nearest_idx]["Atelectasis"]
-            self.annotations.iloc[i]["Cardiomegaly"] = self.labeled.iloc[nearest_idx]["Cardiomegaly"]
-            self.annotations.iloc[i]["Consolidation"] = self.labeled.iloc[nearest_idx]["Consolidation"]
-            self.annotations.iloc[i]["Edema"] = self.labeled.iloc[nearest_idx]["Edema"]
-            self.annotations.iloc[i]["Pleural Effusion"] = self.labeled.iloc[nearest_idx]["Pleural Effusion"]
-            print(self.annotations.iloc[i][['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']])
-            exit()
+            col1, col2, col3, col4, col5 = self.annotations.columns.get_loc('Atelectasis'), self.annotations.columns.get_loc('Cardiomegaly'), self.annotations.columns.get_loc('Consolidation'), self.annotations.columns.get_loc('Edema'), self.annotations.columns.get_loc('Pleural Effusion')
+            self.annotations.iloc[i, col1] = self.labeled.iloc[nearest_idx.item()]["Atelectasis"]
+            self.annotations.iloc[i, col2] = self.labeled.iloc[nearest_idx.item()]["Cardiomegaly"]
+            self.annotations.iloc[i, col3] = self.labeled.iloc[nearest_idx.item()]["Consolidation"]
+            self.annotations.iloc[i, col4] = self.labeled.iloc[nearest_idx.item()]["Edema"]
+            self.annotations.iloc[i, col5] = self.labeled.iloc[nearest_idx.item()]["Pleural Effusion"]
 
     def __len__(self) -> int:
         return self.annotations.shape[0]
@@ -100,9 +106,9 @@ def build_dataloader(split, model):
 
     is_train = split == 'train'
     dataset = ChexpertDataset(ds_path / f"{split}.csv", split)
-    dl_labeled = DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 12), shuffle=is_train)
+    # dl_labeled = DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 12), shuffle=is_train)
     dl_unlabeled = None
     if split == 'train':
         dataset_u = ChexpertDatasetUnlabeled(ds_path / f'{split}.csv', dataset.annotations, model)
-        dl_unlabeled = DataLoader(dataset_u, batch_size=int(bs), num_workers=min(os.cpu_count(), 12), shuffle=is_train)
-    return dl_labeled, dl_unlabeled
+        # dl_unlabeled = DataLoader(dataset_u, batch_size=int(bs), num_workers=min(os.cpu_count(), 12), shuffle=is_train)
+    return dataset, dataset_u
