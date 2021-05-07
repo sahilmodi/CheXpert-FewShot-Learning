@@ -69,12 +69,13 @@ class BasicDiscriminator(nn.Module):
             nn.LeakyReLU(0.2),
             # convert to 1 channel
             nn.Flatten(),
-            nn.Linear(512 * 14 * 14, k + 1),
-            nn.Sigmoid()
+            nn.Dropout(0.4),
+            nn.Linear(512 * 14 * 14, k + 1)
+            # nn.Sigmoid()
         )
 
     def forward(self, input):
-        return self.block(input)
+       return self.block(input)
 
 
 # custom weights initialization called on netG and netD

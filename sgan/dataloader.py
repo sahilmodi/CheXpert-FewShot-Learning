@@ -17,23 +17,27 @@ class ChexpertDataset(Dataset):
         super(ChexpertDataset, self).__init__()
         self.data_path = Path(csv_path).parent
         self.annotations = pd.read_csv(csv_path).fillna(0)
-        labeled_size = cfg.DATA.LABELED_SIZE
-        self.normal = self.annotations[
-            (self.annotations['Atelectasis'] == 0) & (self.annotations['Cardiomegaly'] == 0) & (
-                    self.annotations['Consolidation'] == 0) & (self.annotations['Edema'] == 0) & (
-                    self.annotations['Pleural Effusion'] == 0)]
-        self.abnormal = self.annotations[
-            (self.annotations['Atelectasis'] != 0) | (self.annotations['Cardiomegaly'] != 0) | (
-                    self.annotations['Consolidation'] != 0) | (self.annotations['Edema'] != 0) | (
-                    self.annotations['Pleural Effusion'] != 0)]
-        self.normal = self.normal.sample(n=int(labeled_size/2)).reset_index(drop=True)
-        self.abnormal = self.abnormal.sample(n=int(labeled_size/2)).reset_index(drop=True)
         self.split = split
         self.transforms = None
         self.height, self.width = 224, 224
         self.transforms = get_transforms(self.height, self.width, split)
         if split == "train":
             assert cfg.DATA.BATCH_SIZE <= cfg.DATA.LABELED_SIZE, "Batch size must be smaller than train size."
+            labeled_size = cfg.DATA.LABELED_SIZE
+            self.normal = self.annotations[
+                (self.annotations['Atelectasis'] == 0) & (self.annotations['Cardiomegaly'] == 0) & (
+                        self.annotations['Consolidation'] == 0) & (self.annotations['Edema'] == 0) & (
+                        self.annotations['Pleural Effusion'] == 0)]
+            self.abnormal = self.annotations[
+                (self.annotations['Atelectasis'] != 0) | (self.annotations['Cardiomegaly'] != 0) | (
+                        self.annotations['Consolidation'] != 0) | (self.annotations['Edema'] != 0) | (
+                        self.annotations['Pleural Effusion'] != 0)]
+            # self.normal = self.normal.sample(n=int(labeled_size / 2)).reset_index(drop=True)
+            self.normal = self.normal.sample(n=int(labeled_size / 2))
+            self.abnormal = self.abnormal.sample(n=int(labeled_size / 2))
+            normal_indices = self.normal.index
+            abnormal_indices = self.abnormal.index
+            self.annotations = self.annotations.drop(normal_indices).drop(abnormal_indices)
             self.train_annotations = self.normal.append(self.abnormal, ignore_index=True)
 
     def __len__(self) -> int:
@@ -55,11 +59,11 @@ class ChexpertDataset(Dataset):
 
 class ChexpertDatasetUnlabeled(Dataset):
     def __init__(self, csv_path: Path, shuffled_annotations: pd.DataFrame) -> None:
+        # shuffled_annotations are remaining annotations not used in labeled
         super(ChexpertDatasetUnlabeled, self).__init__()
         self.data_path = Path(csv_path).parent
-        labeled_size = cfg.DATA.LABELED_SIZE
         unlabeled_size = cfg.DATA.UNLABELED_SIZE
-        self.annotations = shuffled_annotations[labeled_size:labeled_size + unlabeled_size].reset_index(drop=True)
+        self.annotations = shuffled_annotations[:unlabeled_size].reset_index(drop=True)
         self.height, self.width = 224, 224
         self.transforms = get_transforms(self.height, self.width, 'train')
 
