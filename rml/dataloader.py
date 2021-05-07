@@ -59,10 +59,11 @@ class ChexpertDatasetUnlabeled(Dataset):
     def assign_nearest(self):
         self.S.clear() # clear when called again
 
-        unlabeled_paths, labeled_paths = list(self.annotations["Path"])[:5], list(self.labeled["Path"])[:5]
+        unlabeled_paths, labeled_paths = list(self.annotations["Path"]), list(self.labeled["Path"])
         def ftr_extractor(path):
             im = Image.open(self.data_path.parent / path)
             im = self.transforms(im).repeat(3, 1, 1)
+            im = im.cuda()
             ftr = self.model.extract_feature(im)
             return ftr
 
@@ -76,8 +77,8 @@ class ChexpertDatasetUnlabeled(Dataset):
             dist = torch.linalg.norm(torch.cat(labeled_ftrs).flatten(1) - unlabel.flatten(1), dim=1, ord=None)
             nearest_idx = torch.argmin(dist)
             nearest = labeled_ftrs[nearest_idx.item()]
-            s_i = np.exp(torch.linalg.norm(nearest.flatten(1) - unlabel.flatten(1), dim=1, ord=None))
-            self.S.append(nearest)       
+            s_i = np.exp(-torch.linalg.norm(nearest.flatten(1) - unlabel.flatten(1), dim=1, ord=None).cpu().numpy())[0]
+            self.S.append(s_i)       
             
             col1, col2, col3, col4, col5 = self.annotations.columns.get_loc('Atelectasis'), self.annotations.columns.get_loc('Cardiomegaly'), self.annotations.columns.get_loc('Consolidation'), self.annotations.columns.get_loc('Edema'), self.annotations.columns.get_loc('Pleural Effusion')
             self.annotations.iloc[i, col1] = self.labeled.iloc[nearest_idx.item()]["Atelectasis"]
@@ -94,7 +95,7 @@ class ChexpertDatasetUnlabeled(Dataset):
         image = Image.open(self.data_path.parent / annotation['Path'])
         classes = annotation[['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']].values.astype("float32")
         data = self.transforms(image)
-        return data.repeat(3, 1, 1), torch.from_numpy(classes)
+        return data.repeat(3, 1, 1), torch.from_numpy(classes), self.S[index]
 
 
 def build_dataloader(split, model):
@@ -106,9 +107,9 @@ def build_dataloader(split, model):
 
     is_train = split == 'train'
     dataset = ChexpertDataset(ds_path / f"{split}.csv", split)
-    # dl_labeled = DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 12), shuffle=is_train)
+    dl_labeled = DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 12), shuffle=is_train)
     dl_unlabeled = None
     if split == 'train':
         dataset_u = ChexpertDatasetUnlabeled(ds_path / f'{split}.csv', dataset.annotations, model)
-        # dl_unlabeled = DataLoader(dataset_u, batch_size=int(bs), num_workers=min(os.cpu_count(), 12), shuffle=is_train)
-    return dataset, dataset_u
+        dl_unlabeled = DataLoader(dataset_u, batch_size=int(bs), num_workers=min(os.cpu_count(), 12), shuffle=is_train)
+    return dl_labeled, dl_unlabeled

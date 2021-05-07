@@ -46,10 +46,10 @@ class RobustWarpLoss(nn.Module):
                     for k in range(num_labels):
                         if target[i, k] == 0:
                             score_margin = 1 - inp[i, j] + inp[i, k]
-                            loss += (s_i * weight * ramp_loss(score_margin))
+                            loss += (s_i * weight * self.ramp_loss(score_margin))
 
                 for l in range(num_labels):
                     for m in range(self.l + self.u):
-                        loss += self.kappa * (s_i * ramp_loss(target[l, m] * inp[l, m]))
+                        loss += self.kappa * (s_i * self.ramp_loss(target[m, l] * inp[m, l]))
 
         return loss
