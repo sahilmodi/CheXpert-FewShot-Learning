@@ -1,6 +1,7 @@
 import os, sys
 from pathlib import Path
-sys.path.append()
+sys.path.append(str(Path(__file__).parent.parent))
+
 import torch 
 import argparse
 
@@ -21,4 +22,12 @@ from utils.transforms import get_transforms
 #             ims, labels = ims.cuda(), labels.cuda()
 #             optimizer.zero_grad()
 
-tr_labeled, tr_unlabeled = build_dataloader("train")
+parser = argparse.ArgumentParser(description='Train a model')
+parser.add_argument('--config', type=str, default='./config/rml_base.yaml')
+args = parser.parse_args()
+
+cfg.merge_from_file(args.config)
+cfg.freeze()
+
+model = RML()
+tr_labeled, tr_unlabeled = build_dataloader("train", model)

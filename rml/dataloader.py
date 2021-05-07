@@ -41,7 +41,7 @@ class ChexpertDataset(Dataset):
 
 
 class ChexpertDatasetUnlabeled(Dataset):
-    def __init__(self, csv_path: Path, shuffled_annotations: pd.DataFrame, feature_extractor) -> None:
+    def __init__(self, csv_path: Path, shuffled_annotations: pd.DataFrame, model) -> None:
         super(ChexpertDatasetUnlabeled, self).__init__()
         self.data_path = Path(csv_path).parent
         labeled_size = cfg.DATA.LABELED_SIZE
@@ -51,22 +51,39 @@ class ChexpertDatasetUnlabeled(Dataset):
         self.S = []
         self.height, self.width = 224, 224
         self.transforms = get_transforms(self.height, self.width, 'train')
-        self.assign_nearest(feature_extractor)
-    
-    def assign_nearest(self, feature_extractor):
-        unlabeled_ims = self.annotations.apply(lambda row: feature_extractor(self.transforms(Image.open(self.data_path.parent / row["Path"])).repeat(3, 1, 1)))
-        labeled_ims = self.labeled.apply(lambda row: feature_extractor(self.transforms(Image.open(self.data_path.parent / row["Path"])).repeat(3, 1, 1)))
 
-        for i, unlabel in enumerate(unlabeled_ims):
-            dist = torch.norm(labeled_ims - unlabel, dim=1, p=None)
-            nearest = dist.topk(1, largest=False)
+        model = model.cuda() 
+        self.assign_nearest(model)
+    
+    def assign_nearest(self, fe):
+        unlabeled_ftrs, labeled_ftrs = [], []
+        for i in range(len(self.annotations)):
+            im = Image.open(self.data_path.parent / self.annotations.iloc[i]["Path"])
+            im = self.transforms(im).repeat(3, 1, 1)
+            im = im.cuda()
+            unlabeled_ftrs.append(fe.extract_feature(im))
+
+        for i in range(len(self.labeled)):
+            im = Image.open(self.data_path.parent / self.labeled.iloc[i]["Path"])
+            im = self.transforms(im).repeat(3, 1, 1)
+            im = im.cuda()
+            labeled_ftrs.append(fe.extract_feature(im))
+            
+        for i, unlabel in enumerate(unlabeled_ftrs):
+            dist = torch.norm(labeled_ftrs - unlabel, dim=1, p=None)
+            nearest_idx = torch.argmin(dist, axis=0)
+            nearest = labeled_ftrs[nearest_idx]
             s_i = np.exp(F.normalize(torch.norm(nearest - unlabel, dim=1, p=None)))
             self.S.append(nearest)
-            self.annotations.iloc[i]["Atelectasis"] = self.labeled.iloc[i]["Atelectasis"]
-            self.annotations.iloc[i]["Cardiomegaly"] = self.labeled.iloc[i]["Cardiomegaly"]
-            self.annotations.iloc[i]["Consolidation"] = self.labeled.iloc[i]["Consolidation"]
-            self.annotations.iloc[i]["Edema"] = self.labeled.iloc[i]["Edema"]
-            self.annotations.iloc[i]["Pleural Effusion"] = self.labeled.iloc[i]["Pleural Effusion"]
+            print(self.annotations.iloc[i][['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']])
+            print(self.labeled.iloc[nearest_idx][['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']])
+            self.annotations.iloc[i]["Atelectasis"] = self.labeled.iloc[nearest_idx]["Atelectasis"]
+            self.annotations.iloc[i]["Cardiomegaly"] = self.labeled.iloc[nearest_idx]["Cardiomegaly"]
+            self.annotations.iloc[i]["Consolidation"] = self.labeled.iloc[nearest_idx]["Consolidation"]
+            self.annotations.iloc[i]["Edema"] = self.labeled.iloc[nearest_idx]["Edema"]
+            self.annotations.iloc[i]["Pleural Effusion"] = self.labeled.iloc[nearest_idx]["Pleural Effusion"]
+            print(self.annotations.iloc[i][['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']])
+            exit()
 
     def __len__(self) -> int:
         return self.annotations.shape[0]
@@ -79,7 +96,7 @@ class ChexpertDatasetUnlabeled(Dataset):
         return data.repeat(3, 1, 1), torch.from_numpy(classes)
 
 
-def build_dataloader(split):
+def build_dataloader(split, model):
     valid_splits = ["train", "valid", "test"]
     assert split in valid_splits, f"{split} should be one of {valid_splits}."
 
@@ -91,7 +108,6 @@ def build_dataloader(split):
     dl_labeled = DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 12), shuffle=is_train)
     dl_unlabeled = None
     if split == 'train':
-        dataset_u = ChexpertDatasetUnlabeled(ds_path / f'{split}.csv', dataset.annotations)
-        # bs = cfg.DATA.UNLABELED_SIZE // (cfg.DATA.LABELED_SIZE / bs)
+        dataset_u = ChexpertDatasetUnlabeled(ds_path / f'{split}.csv', dataset.annotations, model)
         dl_unlabeled = DataLoader(dataset_u, batch_size=int(bs), num_workers=min(os.cpu_count(), 12), shuffle=is_train)
     return dl_labeled, dl_unlabeled
