@@ -24,19 +24,24 @@ class BasicGenerator(nn.Module):
         self.block1 = nn.Sequential(
             # upsample to 28x28
             nn.ConvTranspose2d(in_channels=1024, out_channels=512, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(512),
             nn.LeakyReLU(0.2),
             # upsample to 56x56
             nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(256),
             nn.LeakyReLU(0.2),
             # upsample to 112x112
             nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
             nn.LeakyReLU(0.2),
             # upsample to 224x224
             nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(64),
             nn.LeakyReLU(0.2),
             # convert to 1 channel and add sigmoid so values are between 0-1
             nn.Conv2d(in_channels=64, out_channels=1, kernel_size=7, padding=3),
-            nn.Sigmoid()
+            # nn.Sigmoid()
+            nn.Tanh()
         )
 
     def forward(self, x):

@@ -3,11 +3,12 @@ import torchvision.transforms as transforms
 def get_transforms(height, width, split):
     transform = transforms.Compose([
         transforms.Resize((height, width)),
-        transforms.ToTensor(),
-        transforms.Normalize(128, 64),
-        transforms.ToPILImage(),
+        # transforms.ToTensor(),
+        # transforms.Normalize(128, 64),
+        # transforms.ToPILImage(),
         transforms.Lambda(lambda x: transforms.functional.equalize(x)),
         transforms.ToTensor(),
+        transforms.Normalize(0.5, 0.5)
     ])
     if split == 'train':
         transform = transforms.Compose([

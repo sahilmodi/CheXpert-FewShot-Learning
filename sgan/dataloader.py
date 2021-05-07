@@ -80,8 +80,8 @@ def build_dataloader(split):
     valid_splits = ["train", "valid", "test"]
     assert split in valid_splits, f"{split} should be one of {valid_splits}."
 
-    # ds_path = Path(cfg.DATA.PATH)
-    ds_path = Path("/home/koyejolab/CheXpert/CheXpert-v1.0-small")
+    ds_path = Path(cfg.DATA.PATH)
+    # ds_path = Path("/home/koyejolab/CheXpert/CheXpert-v1.0-small")
     bs = cfg.DATA.BATCH_SIZE
 
     is_train = split == 'train'

@@ -8,20 +8,23 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 
 from models import *
 from dataloader import *
 
-cuda = True if torch.cuda.is_available() else False
+# cuda = True if torch.cuda.is_available() else False
+torch.cuda.set_device(1)
+torch.set_num_threads(1)
 
 import os
 
 experiment_name = str(cfg.DATA.LABELED_SIZE)
-if not os.path.exists("/saved_models_%s" % experiment_name):
-    os.makedirs("/saved_models_%s" % experiment_name)
+if not os.path.exists("saved_models_%s" % experiment_name):
+    os.makedirs("saved_models_%s" % experiment_name)
 
-if not os.path.exists("/train_losses_%s" % experiment_name):
-    os.makedirs("/train_losses_%s" % experiment_name)
+if not os.path.exists("train_losses_%s" % experiment_name):
+    os.makedirs("train_losses_%s" % experiment_name)
 
 g_net = BasicGenerator().cuda()
 g_net.apply(weights_init)
@@ -36,8 +39,9 @@ bce_loss = nn.BCELoss()
 softmax = nn.Softmax(dim=1)
 
 beta1 = 0.5
-optimizerD = optim.Adam(d_net.parameters(), lr=0.0002, betas=(beta1, 0.999))
-optimizerG = optim.Adam(g_net.parameters(), lr=0.002, betas=(beta1, 0.999))
+# optimizerD = optim.Adam(d_net.parameters(), lr=0.0002, betas=(beta1, 0.999))
+optimizerD = optim.SGD(d_net.parameters(), lr=0.0002, momentum=0.9)
+optimizerG = optim.Adam(g_net.parameters(), lr=0.0002, betas=(beta1, 0.999))
 
 D_labeled_losses = []
 D_unlabeled_losses = []
@@ -48,24 +52,32 @@ val_acc_list = []
 labeled_weight = 10
 
 n_epochs = 10
-g_steps = 5
+g_steps = 1
 
+writer = SummaryWriter('sgan/tensorboard_logs/run0_tanh_batchnorm_gsteps1_lrSame_SGD/', flush_secs=60)
 
 def val_acc(discriminator):
     discriminator.eval()
     total = 0
     correct = 0
+    count0, count1, count2 = 0, 0, 0
     for _, val_data in enumerate(dl_val):
         val_imgs, val_labels = val_data
         val_imgs = val_imgs.cuda()
         val_labels = val_labels.cuda()
         outputs = discriminator(val_imgs)
         predicted = torch.argmax(outputs.data, 1)
+        count0 += torch.sum(predicted == 0).item() # len(predicted[predicted == 2]) 
+        count1 += torch.sum(predicted == 1).item() # len(predicted[predicted == 2]) 
+        count2 += torch.sum(predicted == 2).item() # len(predicted[predicted == 2]) 
         total += val_labels.size(0)
         correct += (predicted == val_labels).sum().item()
-    return 100 * correct / total
+    count0 /= total 
+    count1 /= total 
+    count2 /= total 
+    return 100 * correct / total, count0, count1, count2
 
-iter = 0
+iterations = 0
 # set up for len(labeled) > len(unlabeled)
 for epoch in range(n_epochs):
     unlabeled_iter = iter(dl_unlabeled)
@@ -74,7 +86,7 @@ for epoch in range(n_epochs):
             unlabeled_data = next(unlabeled_iter)
         except StopIteration:
             unlabeled_iter = iter(dl_unlabeled)
-            unlabeled_data = next(dl_unlabeled)
+            unlabeled_data = next(unlabeled_iter)
 
         # Training D
         optimizerD.zero_grad()
@@ -120,6 +132,13 @@ for epoch in range(n_epochs):
         print("unlabeled loss: %f" % unlabeled_loss)
         print("generated loss: %f" % generated_loss)
         print("total loss: %f" % total_loss)
+
+        # tensorboard
+        writer.add_scalar('labeled loss', labeled_loss / 10, iterations)
+        writer.add_scalar('unlabeled loss', unlabeled_loss, iterations)
+        writer.add_scalar('generated loss', generated_loss, iterations)
+        writer.add_scalar('total loss', total_loss, iterations)
+        
         D_labeled_losses.append(labeled_loss / labeled_weight)
         D_unlabeled_losses.append(unlabeled_loss)
         D_generated_losses.append(generated_loss)
@@ -145,18 +164,23 @@ for epoch in range(n_epochs):
         print("generator loss: %f" % (total_gen_loss / g_steps))
         print()
 
-        if iter % 50 == 0:
+        if iterations % 50 == 0:
             # save discriminator & generator every 50 iterations
-            torch.save(d_net.state_dict(), "/saved_models_%s/d_%d.pth" % (experiment_name, iter))
-            torch.save(g_net.state_dict(), "/saved_models_%s/g_%d.pth" % (experiment_name, iter))
+            torch.save(d_net.state_dict(), "saved_models_%s/d_%d.pth" % (experiment_name, iterations))
+            torch.save(g_net.state_dict(), "saved_models_%s/g_%d.pth" % (experiment_name, iterations))
 
-        if iter % 10:
+        if iterations % 10 == 0:
             # calculate validation accuracy every 10 iterations
-            acc = val_acc(d_net)
+            acc, count0, count1, count2 = val_acc(d_net)
             val_acc_list.append(acc)
             print("Validation accuracy: %f" % acc)
+            writer.add_scalar('val_acc', acc, iterations)
+            writer.add_scalar('distribution/count0', count0, iterations)
+            writer.add_scalar('distribution/count1', count1, iterations)
+            writer.add_scalar('distribution/count2', count2, iterations)
+            writer.add_image('vis/generator_output', generated_imgs[0], iterations)
 
-        iter += 1
+        iterations += 1
 
 loss_path = "/train_losses_%s" % experiment_name
 np.save('%s/D_labeled_losses.npy' % loss_path, np.array(D_labeled_loss))
