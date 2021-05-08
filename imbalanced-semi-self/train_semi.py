@@ -14,14 +14,14 @@ import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import models
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from imbalance_utils import *
 from dataset.imbalance_cifar import SemiSupervisedImbalanceCIFAR10
 from dataset.imbalance_svhn import SemiSupervisedImbalanceSVHN
 from dataset.imbalance_chexpert import SemiSupervisedImbalanceChexpert, ChexpertDataset
 
 from losses import LDAMLoss, FocalLoss
-from utils.long_tail_config import _C as cfg
+from utils.config import _C as cfg
 
 def set_seed(seed):
     torch.manual_seed(seed)

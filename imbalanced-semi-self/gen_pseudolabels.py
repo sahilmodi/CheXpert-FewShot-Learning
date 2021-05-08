@@ -116,7 +116,7 @@ else:
     criterion = torch.nn.CrossEntropyLoss()
 
     print("Started Training")
-    for epoch in range(5):
+    for epoch in range(25):
         running_loss = 0.0
         for i, (ims, labels) in enumerate(dataloader):
             ims, labels = ims.cuda(), labels.cuda()

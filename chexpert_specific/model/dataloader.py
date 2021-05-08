@@ -35,6 +35,15 @@ class ChexpertDataset(Dataset):
         annotation = annotations.iloc[index]
         image = Image.open(self.data_path.parent / annotation['Path'])
         classes = annotation[['Atelectasis', 'Cardiomegaly', 'Consolidation', 'Edema', 'Pleural Effusion']].values.astype("float32")
+        # image = transforms.Resize((224,224))(image)
+        # print(image.getextrema())
+        # image = transforms.Lambda(lambda x: transforms.functional.equalize(x))(image)
+        # print(image.getextrema())
+        # image = transforms.ToTensor()(image)
+        # print(torch.min(image), torch.max(image))
+        # image = transforms.Normalize(128, 64)(image)
+        # print(torch.min(image), torch.max(image))
+        # exit()
         data = self.transforms(image)
         return data.repeat(3, 1, 1), torch.from_numpy(classes)
 
@@ -67,6 +76,7 @@ def build_dataloader(split):
 
     is_train = split == 'train'
     dataset = ChexpertDataset(ds_path / f"{split}.csv", split)
+    # dataset[0]
     dl_labeled = DataLoader(dataset, batch_size=bs, num_workers=min(os.cpu_count(), 12), shuffle=is_train)
     dl_unlabeled = None
     if split == 'train':

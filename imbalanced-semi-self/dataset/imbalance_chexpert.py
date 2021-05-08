@@ -13,7 +13,7 @@ from torch.utils.data import Dataset, DataLoader
 import scipy
 import pickle
 
-from utils.long_tail_config import _C as cfg
+from utils.config import _C as cfg
 from utils.transforms import get_transforms
 
 def convert_label(label):
@@ -42,7 +42,7 @@ class ChexpertDataset(Dataset):
         self.split = split
         self.transforms = None
         self.height, self.width = 224, 224
-        self.transforms = get_transforms(self.height, self.width, split)
+        self.transforms = get_transforms(self.height, self.width, split=split if labeled else "val")
         if split == "train":
             assert cfg.DATA.BATCH_SIZE <= cfg.DATA.LABELED_SIZE, "Batch size must be smaller than train size."
             self.annotations = self.annotations.sample(frac=1).reset_index(drop=True)

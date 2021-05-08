@@ -49,6 +49,7 @@ class ChexpertDatasetUnlabeled(Dataset):
         unlabeled_size = cfg.DATA.UNLABELED_SIZE
         self.labeled = shuffled_annotations[:labeled_size]
         self.annotations = shuffled_annotations[labeled_size:labeled_size + unlabeled_size].reset_index(drop=True)
+
         self.S = []
         self.height, self.width = 224, 224
         self.transforms = get_transforms(self.height, self.width, 'train')
@@ -111,5 +112,5 @@ def build_dataloader(split, model):
     dl_unlabeled = None
     if split == 'train':
         dataset_u = ChexpertDatasetUnlabeled(ds_path / f'{split}.csv', dataset.annotations, model)
-        dl_unlabeled = DataLoader(dataset_u, batch_size=int(bs), num_workers=min(os.cpu_count(), 12), shuffle=is_train)
+        dl_unlabeled = DataLoader(dataset_u, batch_size=int(bs), num_workers=min(os.cpu_count(), 12), shuffle=is_train, drop_last=True)
     return dl_labeled, dl_unlabeled
