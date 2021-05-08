@@ -11,15 +11,16 @@ SOLVER:
   SCHEDULER_STEP_SIZE: 10
   WEIGHT_DECAY: 1.0e-4
   MIXUP_ALPHA: 0.6
-  SELF_TRAINING: True
+  SELF_TRAINING: False
 
 TEACHER:
   EPOCHS: 15
   BETA_L: 1.0
-  BETA_C: 0.2 # (0.1, 0.25)
+  BETA_U: 1.0 # default value for both regular and self-training teacher.
+  BETA_C: 0.0 # (0.1, 0.25)
 
 STUDENT:
   EPOCHS: 15
   BETA_L: 0.9
   BETA_U: 0.8
-  BETA_C: 0.2 # (0.1, 0.25)
+  BETA_C: 0.0 # (0.1, 0.25)
