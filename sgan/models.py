@@ -10,77 +10,73 @@ class View(nn.Module):
     def forward(self, x):
         return x.view(*self.shape)
 
-
-class BasicGenerator(nn.Module):
+class Generator(nn.Module):
     def __init__(self):
-        super(BasicGenerator, self).__init__()
-        # input is 100x1
-        # output is 1x224x224
-        self.block0 = nn.Sequential(
-            # project and reshape to 14x14
-            nn.Linear(100, 1024 * 14 * 14),
-            nn.LeakyReLU(0.2),
-        )
-        self.block1 = nn.Sequential(
-            # upsample to 28x28
-            nn.ConvTranspose2d(in_channels=1024, out_channels=512, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(512),
-            nn.LeakyReLU(0.2),
-            # upsample to 56x56
-            nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(256),
-            nn.LeakyReLU(0.2),
-            # upsample to 112x112
-            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(128),
-            nn.LeakyReLU(0.2),
-            # upsample to 224x224
-            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(0.2),
-            # convert to 1 channel and add sigmoid so values are between 0-1
-            nn.Conv2d(in_channels=64, out_channels=1, kernel_size=7, padding=3),
-            # nn.Sigmoid()
+        super(Generator, self).__init__()
+
+        nc = 1
+        nz = 100
+        ngf = 64
+        ndf = 64
+
+        self.main = nn.Sequential(
+            # input is Z, going into a convolution
+            nn.ConvTranspose2d( nz, ngf * 8, 4, 1, 0, bias=False),
+            nn.BatchNorm2d(ngf * 8),
+            nn.ReLU(True),
+            # state size. (ngf*8) x 4 x 4
+            nn.ConvTranspose2d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf * 4),
+            nn.ReLU(True),
+            # state size. (ngf*4) x 8 x 8
+            nn.ConvTranspose2d( ngf * 4, ngf * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf * 2),
+            nn.ReLU(True),
+            # state size. (ngf*2) x 16 x 16
+            nn.ConvTranspose2d( ngf * 2, ngf, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf),
+            nn.ReLU(True),
+            # state size. (ngf) x 32 x 32
+            nn.ConvTranspose2d( ngf, nc, 4, 2, 1, bias=False),
             nn.Tanh()
+            # state size. (nc) x 64 x 64
         )
 
-    def forward(self, x):
-        b_size = x.shape[0]
-        x = self.block0(x)
-        x = torch.reshape(x, (b_size, 1024, 14, 14))
-        return self.block1(x)
+    def forward(self, input):
+        return self.main(input)
 
+class Discriminator(nn.Module):
+    def __init__(self):
+        super(Discriminator, self).__init__()
 
-class BasicDiscriminator(nn.Module):
-    def __init__(self, k=6):
-        super(BasicDiscriminator, self).__init__()
-        # input is 1x224x224
-        # output is 1x(K+1)
-        self.block = nn.Sequential(
-            # downsample to 112x112
-            nn.Conv2d(in_channels=1, out_channels=64, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(0.2),
-            # downsample to 56x56
-            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(128),
-            nn.LeakyReLU(0.2),
-            # downsample to 28x28
-            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(256),
-            nn.LeakyReLU(0.2),
-            # downsample to 14x14
-            nn.Conv2d(in_channels=256, out_channels=512, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(512),
-            nn.LeakyReLU(0.2),
-            # convert to 1 channel
-            nn.Flatten(),
-            nn.Dropout(0.4),
-            nn.Linear(512 * 14 * 14, k + 1)
+        nc = 1
+        nz = 100
+        ngf = 64
+        ndf = 64
+
+        self.main = nn.Sequential(
+            # input is (nc) x 64 x 64
+            nn.Conv2d(nc, ndf, 4, 2, 1, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf) x 32 x 32
+            nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ndf * 2),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf*2) x 16 x 16
+            nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ndf * 4),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf*4) x 8 x 8
+            nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ndf * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf*8) x 4 x 4
+            nn.Conv2d(ndf * 8, 6, 4, 1, 0, bias=False),
             # nn.Sigmoid()
         )
 
     def forward(self, input):
-       return self.block(input)
+        return self.main(input)
 
 
 # custom weights initialization called on netG and netD

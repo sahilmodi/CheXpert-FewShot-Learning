@@ -15,7 +15,7 @@ from models import *
 from dataloader import *
 
 # cuda = True if torch.cuda.is_available() else False
-torch.cuda.set_device(3)
+torch.cuda.set_device(2)
 torch.set_num_threads(1)
 
 import os
@@ -36,7 +36,6 @@ d_net = Discriminator().cuda()
 d_net.apply(weights_init)
 
 dl_labeled, dl_unlabeled = build_dataloader('train')
-# dl_val, _ = build_dataloader('valid')
 dl_val, _ = build_dataloader('test')
 
 ce_loss = nn.CrossEntropyLoss()
@@ -60,7 +59,7 @@ labeled_weight = 10
 n_epochs = 10
 g_steps = 1
 
-writer = SummaryWriter('sgan/tensorboard_logs/run0_tanh_batchnorm_gsteps1_lrSame_DCGAN_64_multilabel_20k/', flush_secs=60)
+writer = SummaryWriter('sgan/tensorboard_logs/run0_tanh_batchnorm_gsteps1_lrSame_DCGAN_64_multilabel_1k/', flush_secs=60)
 # writer = SummaryWriter('sgan/tensorboard_logs/debug/', flush_secs=60)
 
 def get_auc(labels, y):
@@ -100,13 +99,14 @@ def val_acc(discriminator):
 iterations = 0
 # set up for len(labeled) > len(unlabeled)
 for epoch in range(n_epochs):
-    unlabeled_iter = iter(dl_unlabeled)
-    for i, labeled_data in enumerate(dl_labeled):
+    # unlabeled_iter = iter(dl_unlabeled)
+    labeled_iter = iter(dl_labeled)
+    for i, unlabeled_data in enumerate(dl_unlabeled):
         try:
-            unlabeled_data = next(unlabeled_iter)
+            labeled_data = next(labeled_iter)
         except StopIteration:
-            unlabeled_iter = iter(dl_unlabeled)
-            unlabeled_data = next(unlabeled_iter)
+            labeled_iter = iter(dl_labeled)
+            labeled_data = next(labeled_iter)
 
         # Training D
         optimizerD.zero_grad()
